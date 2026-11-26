@@ -1,0 +1,1819 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Inkworm Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: full-bleed WebGL canvas; floating toolbar top-left; control panel docked right (bottom sheet on phones). */
+:root{
+  color-scheme: dark;
+  --bg:#050404;
+  --panel:rgba(14,11,10,.9);
+  --panel-solid:#0e0b0a;
+  --line:rgba(239,220,203,.12);
+  --line-strong:rgba(239,220,203,.26);
+  --fg:#efdccb;
+  --muted:#9a8b7f;
+  --accent:#e2462a;
+  --accent-soft:rgba(226,70,42,.18);
+  --ink:#0a0c16;
+  --font-ui:"Space Grotesk",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --panel-w:340px;
+}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);overflow:hidden;font-family:var(--font-mono);font-size:12px}
+canvas{position:fixed;inset:0;width:100%;height:100%;display:block}
+#ov{touch-action:none;cursor:crosshair}
+#ov.tool-select{cursor:default}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:rgba(239,220,203,.06);border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer;white-space:nowrap;transition:background .15s,border-color .15s}
+button:hover{background:rgba(239,220,203,.12);border-color:var(--line-strong)}
+button:focus-visible,select:focus-visible,input:focus-visible,summary:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.on{background:var(--accent-soft);border-color:var(--accent);color:#fff}
+#hud,#panel summary,.row label,.seg,.btns{-webkit-user-select:none;user-select:none}
+#hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 12px);left:calc(env(safe-area-inset-left,0px) + 12px);right:calc(var(--panel-w) + 24px);display:flex;flex-direction:column;gap:8px;pointer-events:none;z-index:5}
+#hud>*{pointer-events:auto}
+.bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:6px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);width:max-content;max-width:100%}
+.brand{font-family:var(--font-ui);font-weight:600;font-size:14px;letter-spacing:.02em;padding:0 8px 0 6px}
+.brand i{font-style:normal;color:var(--accent)}
+.count{color:var(--muted);padding:0 6px;font-variant-numeric:tabular-nums}
+#panel{position:fixed;top:0;right:0;bottom:0;width:var(--panel-w);background:var(--panel);border-left:1px solid var(--line);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);overflow-y:auto;overscroll-behavior:contain;z-index:6;padding:calc(env(safe-area-inset-top,0px) + 14px) max(14px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 24px) 14px;box-sizing:border-box;transition:transform .25s ease}
+#panel.closed{transform:translateX(100%)}
+body.panel-closed #hud{right:12px}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.ph h2{font-family:var(--font-ui);font-weight:600;font-size:15px;margin:0;letter-spacing:.01em}
+.sel-tag{color:var(--muted);font-size:11px}
+details{border-top:1px solid var(--line);padding:2px 0}
+details:last-of-type{border-bottom:1px solid var(--line)}
+summary{list-style:none;cursor:pointer;padding:9px 2px;font-family:var(--font-ui);font-weight:500;font-size:12.5px;letter-spacing:.06em;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;color:var(--fg)}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--muted);font-family:var(--font-mono);font-size:14px}
+details[open]>summary::after{content:"−"}
+.rows{display:flex;flex-direction:column;gap:7px;padding:2px 2px 12px}
+.row{display:grid;grid-template-columns:118px 1fr 44px;align-items:center;gap:8px;min-width:0}
+.row label{color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px}
+.row output{text-align:right;font-variant-numeric:tabular-nums;color:var(--fg);font-size:11px}
+.row.wide{grid-template-columns:118px 1fr}
+.row input[type=range]{width:100%;min-width:0;accent-color:var(--accent);height:18px;margin:0}
+.row input[type=color]{width:100%;height:22px;border:1px solid var(--line);border-radius:6px;background:none;padding:0 2px;cursor:pointer}
+.row select{width:100%;background:var(--panel-solid);border:1px solid var(--line);border-radius:6px;padding:4px 6px}
+.row input[type=checkbox]{accent-color:var(--accent);width:16px;height:16px;margin:0;justify-self:start}
+.btns{display:flex;flex-wrap:wrap;gap:6px;padding:2px 0 4px}
+.btns button{padding:5px 10px;font-size:11.5px}
+.seg{display:flex;gap:0;border:1px solid var(--line);border-radius:999px;overflow:hidden;width:max-content}
+.seg button{border:0;border-radius:0;background:transparent;padding:5px 10px}
+.seg button.on{background:var(--accent-soft);color:#fff}
+.sub{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding-top:6px;border-top:1px dashed var(--line);margin-top:2px}
+textarea{width:100%;box-sizing:border-box;min-height:90px;background:var(--panel-solid);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:10.5px;resize:vertical}
+.note{color:var(--muted);font-size:11px;line-height:1.5;margin:4px 0 0}
+#toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 22px);transform:translateX(-50%);background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:7px 14px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:9}
+#toast.show{opacity:1}
+#err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;padding:24px;text-align:center;line-height:1.6;z-index:10;background:var(--bg)}
+body.hide-ui #hud,body.hide-ui #panel{display:none}
+@media (max-width:760px){
+  :root{--panel-w:100%}
+  #hud{right:calc(env(safe-area-inset-right,0px) + 12px)}
+  body.panel-closed #hud{right:calc(env(safe-area-inset-right,0px) + 12px)}
+  #panel{top:auto;left:0;height:min(58vh,560px);border-left:0;border-top:1px solid var(--line);border-radius:16px 16px 0 0;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-top:12px}
+  #panel.closed{transform:translateY(100%)}
+  #toast{bottom:auto;top:calc(env(safe-area-inset-top,0px) + 150px);max-width:calc(100% - 48px);text-align:center;border-radius:14px}
+  .row{grid-template-columns:110px 1fr 42px}
+  .brand{display:none}
+}
+@media (prefers-reduced-motion:reduce){#panel,#toast,button{transition:none}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="ov" class="tool-select"></canvas>
+
+<div id="hud">
+  <div class="bar" id="toolbar">
+    <span class="brand">Inkworm<i>·</i>Lab</span>
+    <button id="bPlay" title="Pause / resume (Space)">Pause</button>
+    <button id="bRegrow" title="Grow every creature again (R)">Regrow</button>
+    <button id="bAdd" title="Add a creature (A)">+ Creature</button>
+    <button id="bDel" title="Remove the selected creature (Delete)">− Remove</button>
+    <span class="count" id="count">1</span>
+    <button id="bPanel" title="Show or hide controls (C)">Controls</button>
+  </div>
+  <div class="bar seg-bar">
+    <div class="seg" id="tools" role="group" aria-label="Pointer tool">
+      <button data-tool="select" class="on" title="Tap a creature to select it, drag to steer it">Select</button>
+      <button data-tool="wall" title="Drag to draw a wall">Draw wall</button>
+      <button data-tool="erase" title="Drag over walls to erase them">Erase</button>
+      <button data-tool="attract" title="Creatures crawl toward the pointer">Lure</button>
+      <button data-tool="spawn" title="Tap to place a new creature">Spawn</button>
+    </div>
+  </div>
+</div>
+
+<aside id="panel" aria-label="Simulation controls">
+  <div class="ph"><h2>Controls</h2><span class="sel-tag" id="selTag">Editing: creature 1</span></div>
+  <div id="panelBody"></div>
+</aside>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="err"></div>
+
+<script>
+'use strict';
+(() => {
+/* ============================================================
+   Constants & small utilities
+   ============================================================ */
+const MAXN = 64;          // max spine nodes per creature (uniform array size)
+const HP = 10;            // points per cilium strand
+const FPV = 12;           // floats per hair vertex
+const TAU = Math.PI * 2;
+const clamp = (x, a, b) => x < a ? a : x > b ? b : x;
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = t => { t = clamp(t, 0, 1); return t * t * (3 - 2 * t); };
+const wrapA = a => { a = (a + Math.PI) % TAU; if (a < 0) a += TAU; return a - Math.PI; };
+function hash1(n) { const s = Math.sin(n * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
+function noise1(x) { const i = Math.floor(x), f = x - i, u = f * f * (3 - 2 * f); return lerp(hash1(i), hash1(i + 1), u); }
+function rng(seed) { let a = seed | 0; return () => { a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+const colorCache = new Map();
+function rgb(h) {
+  let c = colorCache.get(h); if (c) return c;
+  let s = String(h).replace('#', ''); if (s.length === 3) s = s.split('').map(x => x + x).join('');
+  const n = parseInt(s, 16) || 0; c = [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
+  colorCache.set(h, c); return c;
+}
+function toHex(c) { return '#' + c.map(v => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join(''); }
+
+/* ============================================================
+   Parameter schema — every knob that shapes a creature
+   ============================================================ */
+const F = (k, l, min, max, step, rb) => ({ k, l, min, max, step, t: 'f', rb });
+const I = (k, l, min, max, rb) => ({ k, l, min, max, step: 1, t: 'i', rb });
+const C = (k, l) => ({ k, l, t: 'c' });
+const B = (k, l) => ({ k, l, t: 'b' });
+const S = (k, l, opts, rb) => ({ k, l, t: 's', opts, rb });
+
+const SCHEMA = [
+  { name: 'Body shape', open: true, items: [
+    I('segments', 'Segments', 3, MAXN, 'body'),
+    F('size', 'Size (px)', 6, 120, 1),
+    F('spacing', 'Segment spacing', 0.15, 2.5, 0.01),
+    F('headSize', 'Head size', 0.2, 3, 0.01),
+    F('headLength', 'Head length', 0.02, 0.6, 0.01),
+    F('snout', 'Snout nub', 0, 1, 0.01),
+    F('neckPinch', 'Neck pinch', 0, 0.95, 0.01),
+    F('thickness', 'Body thickness', 0.2, 3, 0.01),
+    F('bellyPos', 'Belly position', 0.1, 0.98, 0.01),
+    F('tailTaper', 'Tail taper', 0, 0.98, 0.01),
+    F('bulge', 'Segment bulge', 0, 0.5, 0.01),
+    I('bulgePeriod', 'Bulge period', 1, 8),
+    F('lumpiness', 'Lumpiness', 0, 0.6, 0.01),
+    F('elong', 'Segment stretch', 0.6, 2.2, 0.01),
+    S('headTop', 'Layering', ['Tail under head', 'Head under tail']),
+    F('growTime', 'Grow-in time (s)', 0, 8, 0.1),
+  ]},
+  { name: 'Motion', open: true, items: [
+    F('speed', 'Crawl speed', 0, 220, 1),
+    F('wander', 'Wander', 0, 3, 0.01),
+    F('wanderFreq', 'Wander rate', 0.01, 1.5, 0.01),
+    F('slither', 'Slither', 0, 1.2, 0.01),
+    F('slitherFreq', 'Slither rate', 0.02, 2, 0.01),
+    F('peristalsis', 'Peristalsis', 0, 0.4, 0.005),
+    F('periSpeed', 'Pulse speed', 0, 3, 0.01),
+    F('periLength', 'Pulse wavelength', 2, 40, 0.5),
+    F('breathe', 'Breathing', 0, 0.3, 0.005),
+    F('breatheSpeed', 'Breath rate', 0, 2, 0.01),
+    F('curl', 'Body curl (rad)', -7, 7, 0.01),
+    F('headCurl', 'Head curl (rad)', -4, 4, 0.01),
+    F('curlSpread', 'Head curl spread', 0.03, 0.6, 0.01),
+    F('stiffness', 'Shape memory', 0, 0.6, 0.005),
+    F('maxBend', 'Max joint bend', 0.05, 1.5, 0.01),
+    F('avoid', 'Obstacle sense', 0, 3, 0.01),
+    F('collide', 'Body solidity', 0.2, 1.2, 0.01),
+  ]},
+  { name: 'Skin', items: [
+    C('cSkin', 'Skin'), C('cSkinHi', 'Skin highlight'),
+    F('centerGlow', 'Center glow', 0, 1, 0.01),
+    F('rimShade', 'Edge shading', 0, 1, 0.01),
+    F('roundness', 'Segment roundness', 0, 1, 0.01),
+    F('speckles', 'Speckle density', 0, 1, 0.01),
+    F('speckleScale', 'Speckle scale', 4, 60, 0.5),
+    F('accents', 'Red flecks', 0, 1, 0.01),
+    C('cAccent', 'Fleck color'), C('cAccent2', 'Fleck glow'),
+  ]},
+  { name: 'Ink', items: [
+    C('cInk', 'Ink'), C('cInkMid', 'Ink midtone'),
+    F('inkMid', 'Midtone amount', 0, 1, 0.01),
+    F('fringe', 'Feathering', 0, 3, 0.01),
+    F('fringeFreq', 'Feather density', 1, 40, 0.1),
+    F('inkSoft', 'Ink softness', 0.005, 0.4, 0.005),
+    F('inkDepth', 'Ink depth falloff', 0.01, 1.5, 0.01),
+    F('inkDetail', 'Comb lines', 0, 1, 0.01),
+    F('flow', 'Ink flow speed', 0, 1, 0.005),
+    F('warp', 'Marbling warp', 0, 1.5, 0.01),
+    { t: 'sub', l: 'Edge streaks' },
+    F('edgeAmt', 'Edge ink', 0, 1, 0.01),
+    F('edgeStart', 'Edge reach', 0.05, 1.1, 0.01),
+    F('edgeStreaks', 'Streak count', 1, 40, 0.5),
+    { t: 'sub', l: 'Long stripes' },
+    F('stripeAmt', 'Stripes', 0, 1, 0.01),
+    F('stripeCount', 'Stripe count', 0.2, 8, 0.05),
+    F('stripeWidth', 'Stripe width', 0, 1, 0.01),
+    F('stripeOffset', 'Stripe offset', 0, 1, 0.01),
+    F('stripeStart', 'Stripes start at', 0, 1, 0.01),
+    { t: 'sub', l: 'Cross bands' },
+    F('bandAmt', 'Bands', 0, 1, 0.01),
+    F('bandPeriod', 'Band spacing', 0.08, 3, 0.01),
+    F('bandWidth', 'Band width', 0, 1, 0.01),
+    F('checker', 'Checker offset', 0, 1, 0.01),
+    F('bandEnd', 'Bands end at', 0, 1.05, 0.01),
+    { t: 'sub', l: 'Side shadow' },
+    F('sideAmt', 'Side shadow', 0, 1, 0.01),
+    S('sideMode', 'Shadow side', ['Inside of bend', 'Left', 'Right', 'Outside of bend']),
+    F('sideWidth', 'Shadow width', 0, 1, 0.01),
+    F('sideRibs', 'Rib fingers', 0, 1.5, 0.01),
+  ]},
+  { name: 'Outlines & membrane', items: [
+    C('cRim', 'Outline color'),
+    F('rimWidth', 'Outline width', 0, 5, 0.05),
+    F('outlineAmt', 'Silhouette line', 0, 1, 0.01),
+    F('segLines', 'Segment arcs', 0, 1, 0.01),
+    I('segEvery', 'Arc every n segs', 1, 8),
+    F('lightRim', 'Light rim', 0, 1, 0.01),
+    F('lightRimWidth', 'Light rim width', 0.02, 0.6, 0.005),
+    C('cLightRim', 'Light rim color'),
+    F('membrane', 'Outer membrane', 0, 1, 0.01),
+    F('membraneOffset', 'Membrane gap', 0, 30, 0.1),
+    F('beads', 'Membrane beads', 0, 1, 0.01),
+    C('cMembrane', 'Membrane color'),
+  ]},
+  { name: 'Head', items: [
+    S('headStyle', 'Head pattern', ['Plain', 'Gill fan', 'Eye face']),
+    I('headNodes', 'Head segments', 1, 8),
+    F('fanLines', 'Gill count', 6, 120, 1),
+    F('headAmt', 'Pattern strength', 0, 1, 0.01),
+    F('headGlow', 'Head glow', 0, 1.5, 0.01),
+  ]},
+  { name: 'Cells', items: [
+    F('cellAmt', 'Cell voids', 0, 1, 0.01),
+    F('cellScale', 'Cell scale', 0.3, 6, 0.01),
+    F('cellMembrane', 'Cell walls', 0.01, 0.6, 0.005),
+    F('cellGlow', 'Inner glow', 0, 1.5, 0.01),
+    C('cHole', 'Void color'), C('cHoleGlow', 'Glow color'),
+  ]},
+  { name: 'White cilia', items: [
+    F('hairDensity', 'Density', 0, 8, 0.05, 'hair'),
+    F('hairFalloff', 'Head bias', 0, 1, 0.01, 'hair'),
+    F('headTuft', 'Head tuft', 0, 5, 0.05, 'hair'),
+    F('hairLength', 'Length', 0, 2.5, 0.01),
+    F('hairWidth', 'Width', 0.2, 6, 0.05),
+    F('hairCurl', 'Curl', 0, 8, 0.05),
+    F('hairWave', 'Wiggle', 0, 2, 0.01),
+    F('hairInset', 'Root inset', 0.4, 1.2, 0.01),
+    F('hairSweep', 'Sweep back', -1.5, 1.5, 0.01),
+    F('hairLine', 'Outline', 0, 3, 0.05),
+    C('cHair', 'Color'), C('cHairLine', 'Outline color'),
+  ]},
+  { name: 'Red cilia', items: [
+    F('redDensity', 'Density', 0, 8, 0.05, 'hair'),
+    F('redFalloff', 'Head bias', 0, 1, 0.01, 'hair'),
+    F('redLength', 'Length', 0, 2.5, 0.01),
+    F('redWidth', 'Width', 0.2, 8, 0.05),
+    F('redCurl', 'Curl', 0, 8, 0.05),
+    F('redWave', 'Wiggle', 0, 2, 0.01),
+    C('cRed', 'Root color'), C('cRed2', 'Tip color'),
+  ]},
+  { name: 'Tail strands & spores', items: [
+    I('strandCount', 'Tail strands', 0, 40, 'hair'),
+    F('strandLength', 'Strand length', 0, 6, 0.01),
+    F('strandWave', 'Strand wiggle', 0, 2, 0.01),
+    F('sporeRate', 'Spores / s', 0, 40, 0.1),
+    F('sporeSize', 'Spore size', 0.3, 5, 0.05),
+    F('sporeLife', 'Spore life (s)', 0.3, 10, 0.1),
+  ]},
+  { name: 'Cilia motion', items: [
+    F('waveSpeed', 'Beat speed', 0, 3, 0.01),
+    F('drag', 'Drag in motion', 0, 3, 0.01),
+    B('hairBehind', 'Cilia behind body'),
+  ]},
+];
+const ITEM = {};
+for (const g of SCHEMA) for (const it of g.items) if (it.k) ITEM[it.k] = it;
+
+/* ============================================================
+   Presets — tuned against the five creatures in the reference clip
+   ============================================================ */
+const DEF = {
+  segments: 34, size: 28, spacing: 0.42, headSize: 1.55, headLength: 0.12, snout: 0, neckPinch: 0.5, thickness: 1.2,
+  bellyPos: 0.78, tailTaper: 0.25, bulge: 0.03, bulgePeriod: 2, lumpiness: 0.04, elong: 1.12, headTop: 0, growTime: 1.6,
+  speed: 10, wander: 0.25, wanderFreq: 0.1, slither: 0.06, slitherFreq: 0.3, peristalsis: 0.05, periSpeed: 0.5, periLength: 9,
+  breathe: 0.025, breatheSpeed: 0.3, curl: 0.15, headCurl: 1.35, curlSpread: 0.26, stiffness: 0.08, maxBend: 0.55, avoid: 1, collide: 0.85,
+  cSkin: '#ecd8c6', cSkinHi: '#fcf2e7', centerGlow: 0.4, rimShade: 0.15, roundness: 0.15, speckles: 0.08, speckleScale: 18,
+  accents: 0.12, cAccent: '#d0200f', cAccent2: '#ff6a2b',
+  cInk: '#040509', cInkMid: '#353f5c', inkMid: 0.5, fringe: 1.0, fringeFreq: 14, inkSoft: 0.03, inkDepth: 0.12, inkDetail: 0.2, flow: 0.06, warp: 0.25,
+  edgeAmt: 0.55, edgeStart: 0.86, edgeStreaks: 12,
+  stripeAmt: 1, stripeCount: 1.9, stripeWidth: 0.5, stripeOffset: 0.22, stripeStart: 0.4,
+  bandAmt: 1, bandPeriod: 0.4, bandWidth: 0.46, checker: 1, bandEnd: 0.43,
+  sideAmt: 0, sideMode: 0, sideWidth: 0.4, sideRibs: 0,
+  cRim: '#0b0b12', rimWidth: 1.0, outlineAmt: 0.35, segLines: 0.5, segEvery: 3,
+  lightRim: 0, lightRimWidth: 0.12, cLightRim: '#fff6ec',
+  membrane: 0.4, membraneOffset: 3, beads: 0.5, cMembrane: '#d8cdc3',
+  headStyle: 1, headNodes: 2, fanLines: 56, headAmt: 1, headGlow: 1.0,
+  cellAmt: 0, cellScale: 1.0, cellMembrane: 0.16, cellGlow: 0.8, cHole: '#080303', cHoleGlow: '#b8683a',
+  hairDensity: 2.6, hairFalloff: 0.85, headTuft: 1.6, hairLength: 0.7, hairWidth: 2.0, hairCurl: 2.8, hairWave: 0.55,
+  hairInset: 0.93, hairSweep: 0.3, hairLine: 0.35, cHair: '#eee3d8', cHairLine: '#0b0b10',
+  redDensity: 0.8, redFalloff: 0.9, redLength: 0.3, redWidth: 2.6, redCurl: 1.4, redWave: 0.45, cRed: '#a8120c', cRed2: '#ff4a1f',
+  strandCount: 0, strandLength: 2.2, strandWave: 0.35, sporeRate: 0, sporeSize: 1.4, sporeLife: 3,
+  waveSpeed: 0.5, drag: 0.6, hairBehind: false,
+};
+
+const PRESETS = {
+  'Fan Striper': {},
+  'Plumed Grub': {
+    segments: 10, size: 44, spacing: 0.55, headSize: 1.2, headLength: 0.42, neckPinch: 0.26, thickness: 1.25, bellyPos: 0.8,
+    tailTaper: 0.05, bulge: 0.04, bulgePeriod: 3, lumpiness: 0.05, elong: 1.2, headTop: 1, growTime: 1.4,
+    speed: 6, wander: 0.35, slither: 0.04, peristalsis: 0.04, curl: 1.5, headCurl: 0.2, stiffness: 0.12, maxBend: 0.45,
+    cSkin: '#efe0d3', cSkinHi: '#fcf4ec', centerGlow: 0.3, rimShade: 0.1, roundness: 0.45, speckles: 0.28, speckleScale: 26, accents: 0.3,
+    cInkMid: '#2d3654', inkMid: 0.75, fringe: 1.6, fringeFreq: 12, inkSoft: 0.1, inkDepth: 0.5, inkDetail: 0.45, warp: 0.3,
+    edgeAmt: 1, edgeStart: 0.8, edgeStreaks: 15,
+    stripeAmt: 0, bandAmt: 0, sideAmt: 0.7, sideMode: 3, sideWidth: 0.25,
+    outlineAmt: 0.4, segLines: 0.4, segEvery: 4, membrane: 0,
+    headStyle: 2, headNodes: 2, headAmt: 1, headGlow: 0.2,
+    hairDensity: 1.8, hairFalloff: 0, headTuft: 1.5, hairLength: 1.05, hairWidth: 1.9, hairCurl: 3.2, hairWave: 0.6, hairInset: 0.86, hairSweep: 0.35, hairLine: 0.55,
+    redDensity: 1.4, redFalloff: 0, redLength: 0.55, redWidth: 3.4, redCurl: 1.6, redWave: 0.5,
+  },
+  'Bubble Chain': {
+    segments: 6, size: 32, spacing: 1.4, headSize: 1.3, headLength: 0.2, neckPinch: 0.1, thickness: 1.02, bellyPos: 0.5,
+    tailTaper: 0.3, bulge: 0, lumpiness: 0.22, elong: 1.05, headTop: 0, growTime: 1.2,
+    speed: 8, wander: 0.6, slither: 0.08, peristalsis: 0.06, curl: 0.5, headCurl: 0.2, stiffness: 0.08, maxBend: 0.5,
+    cSkin: '#f0dccb', cSkinHi: '#fff4ea', centerGlow: 0.2, rimShade: 0.1, roundness: 0.9, speckles: 0.05, accents: 0.35,
+    inkMid: 0.3, edgeAmt: 0.25, edgeStart: 0.95, edgeStreaks: 10, stripeAmt: 0, bandAmt: 0, inkDetail: 0, warp: 0.2,
+    cRim: '#120a08', rimWidth: 0.7, outlineAmt: 0.25, segLines: 0.2, segEvery: 1,
+    lightRim: 1, lightRimWidth: 0.1, cLightRim: '#fbeee2', membrane: 0,
+    headStyle: 0, headGlow: 0,
+    cellAmt: 1, cellScale: 1.5, cellMembrane: 0.2, cellGlow: 0.35,
+    hairDensity: 0.5, hairFalloff: 0, headTuft: 0.6, hairLength: 0.25, hairWidth: 1.5, hairCurl: 2.5, hairSweep: 0.4,
+    redDensity: 0.35, redFalloff: 0, redLength: 0.14, redWidth: 1.8,
+    strandCount: 22, strandLength: 3.0, strandWave: 0.6, sporeRate: 7, sporeSize: 1.6, sporeLife: 3.5, hairBehind: true,
+  },
+  'Pale Crawler': {
+    segments: 30, size: 24, spacing: 0.46, headSize: 1.7, headLength: 0.2, snout: 0.8, neckPinch: 0.3, thickness: 1.05, bellyPos: 0.55,
+    tailTaper: 0.35, bulge: 0.12, bulgePeriod: 3, lumpiness: 0.05, elong: 1.15, headTop: 0, growTime: 1.8,
+    speed: 14, wander: 0.6, slither: 0.22, slitherFreq: 0.22, peristalsis: 0.07, curl: 1.4, headCurl: 1.4, stiffness: 0.05, maxBend: 0.6,
+    cSkin: '#ecd8c6', cSkinHi: '#f8ece0', centerGlow: 0.35, rimShade: 0.15, roundness: 0.2, speckles: 0.25, speckleScale: 14, accents: 0.1,
+    inkMid: 0.6, fringe: 0.3, fringeFreq: 8, inkSoft: 0.15, inkDepth: 0.5, inkDetail: 0.15, warp: 0.15,
+    edgeAmt: 0.2, edgeStart: 0.92, stripeAmt: 0,
+    bandAmt: 0.5, bandPeriod: 0.5, bandWidth: 0.1, checker: 0, bandEnd: 0.45,
+    sideAmt: 0.95, sideMode: 0, sideWidth: 0.42, sideRibs: 1.0,
+    outlineAmt: 0.45, segLines: 0.6, segEvery: 3, membrane: 0,
+    headStyle: 0, headNodes: 3, headGlow: 0.2,
+    hairDensity: 2.4, hairFalloff: 0.2, headTuft: 0.8, hairLength: 0.25, hairWidth: 1.0, hairCurl: 3.2, hairWave: 0.6, hairLine: 0.35,
+    redDensity: 0.35, redFalloff: 0.3, redLength: 0.14, redWidth: 1.8,
+  },
+  'Coiled Ring': {
+    segments: 36, size: 46, spacing: 0.4, headSize: 1.15, headLength: 0.08, neckPinch: 0.08, thickness: 1.0, bellyPos: 0.5,
+    tailTaper: 0.2, bulge: 0.05, bulgePeriod: 3, lumpiness: 0.05, elong: 1.15, headTop: 1, growTime: 1.4,
+    speed: 5, wander: 0.1, slither: 0.02, peristalsis: 0.04, curl: 6.1, headCurl: 0.5, stiffness: 0.5, maxBend: 0.4, avoid: 0.4,
+    cSkin: '#e9dcd2', cSkinHi: '#f6eee8', centerGlow: 0.25, rimShade: 0.1, speckles: 0.22, speckleScale: 24, accents: 0.45,
+    cInkMid: '#2a3352', inkMid: 0.45, fringe: 2.2, fringeFreq: 16, inkSoft: 0.04, inkDepth: 0.3, inkDetail: 0.5, warp: 0.35,
+    edgeAmt: 1, edgeStart: 0.45, edgeStreaks: 18,
+    stripeAmt: 0.7, stripeCount: 2.6, stripeWidth: 0.28, stripeStart: 0, bandAmt: 0,
+    outlineAmt: 0.45, segLines: 0.3, segEvery: 4, membrane: 0.35, membraneOffset: 6, beads: 0.4,
+    headStyle: 2, headNodes: 2, headAmt: 0.9, headGlow: 0.15,
+    hairDensity: 3, hairFalloff: 0, headTuft: 1, hairLength: 0.55, hairWidth: 1.4, hairCurl: 3.4, hairWave: 0.6, hairLine: 0.5,
+    redDensity: 2.2, redFalloff: 0, redLength: 0.5, redWidth: 3.2, redCurl: 2.4,
+    cRed: '#c2120a', cRed2: '#ff3a1c',
+  },
+};
+const PRESET_ORDER = ['Plumed Grub', 'Fan Striper', 'Bubble Chain', 'Pale Crawler', 'Coiled Ring'];
+const presetGenome = name => Object.assign({}, DEF, PRESETS[name] || {});
+
+/* ============================================================
+   Scene settings (not per creature)
+   ============================================================ */
+const scene = {
+  paused: false, timeScale: 1, editAll: false, preset: 'Fan Striper',
+  gallery: false, galleryInterval: 3.2,
+  edges: true, creatureCollide: true, hairWalls: true,
+  wallThickness: 5, wallColor: '#8f8277', showWalls: true, freehand: false,
+  zoom: 1, bg: '#050404', softness: 0.35, vignette: 0.35, grain: 0.035, exposure: 1, contrast: 1.04, saturation: 1, renderScale: 1,
+};
+
+/* ============================================================
+   Creature simulation
+   ============================================================ */
+let nextId = 1;
+class Creature {
+  constructor(genome, x, y, heading) {
+    this.id = nextId++;
+    this.g = Object.assign({}, DEF, genome);
+    this.seed = (Math.random() * 100000) | 0;
+    this.heading = heading ?? Math.random() * TAU;
+    this.t = Math.random() * 40;
+    this.grow = 0; this.fade = 1; this.fadeTarget = 1; this.pending = null;
+    this.peri = Math.random() * TAU;
+    this.sporeAcc = 0;
+    this.drag = null;
+    this.layout(x, y);
+    this.buildHairs();
+  }
+  alloc(N) {
+    this.N = N;
+    for (const k of ['px', 'py', 'ox', 'oy', 'vx', 'vy', 'r', 'rb', 'rest', 'u', 'tx', 'ty', 'curv']) this[k] = new Float32Array(N);
+  }
+  computeBase() {
+    const g = this.g, N = this.N;
+    const hl = Math.max(0.01, g.headLength), bp = Math.max(hl + 0.02, g.bellyPos);
+    const head = g.headSize, neck = Math.min(g.headSize, g.thickness) * (1 - g.neckPinch), body = g.thickness, tail = g.thickness * (1 - g.tailTaper);
+    for (let i = 0; i < N; i++) {
+      const t = N > 1 ? i / (N - 1) : 0;
+      let r;
+      if (t < hl * 0.5) r = lerp(head * 0.9, head, smooth(t / (hl * 0.5)));
+      else if (t < hl) r = lerp(head, neck, smooth((t - hl * 0.5) / (hl * 0.5)));
+      else if (t < bp) r = lerp(neck, body, smooth((t - hl) / (bp - hl)));
+      else r = lerp(body, tail, Math.pow((t - bp) / Math.max(1e-4, 1 - bp), 1.4));
+      r *= 1 + g.bulge * Math.cos(TAU * i / Math.max(1, g.bulgePeriod));
+      r *= 1 + g.lumpiness * (hash1(i * 7.31 + this.seed * 0.013) - 0.5) * 2;
+      this.rb[i] = Math.max(0.04, r) * g.size;
+    }
+    for (let i = 0; i < N - 1; i++) this.rest[i] = Math.max(1.5, g.spacing * (this.rb[i] + this.rb[i + 1]) * 0.5);
+    if (g.snout > 0 && N > 2) {
+      // a small nub poking out of the front of the head
+      this.rb[0] = this.rb[1] * lerp(1, 0.4, g.snout);
+      this.rest[0] = lerp(this.rest[0], this.rb[1] * 1.02, g.snout);
+    }
+    let s = 0; for (let i = 1; i < N; i++) s += Math.exp(-(i - 1) / Math.max(1, N * g.curlSpread));
+    this.hwSum = s || 1;
+  }
+  bendTarget(i) {
+    const g = this.g, N = this.N;
+    return g.curl / Math.max(1, N - 2) + g.headCurl * Math.exp(-(i - 1) / Math.max(1, N * g.curlSpread)) / this.hwSum;
+  }
+  layout(x, y) {
+    this.alloc(clamp(this.g.segments | 0, 3, MAXN));
+    this.computeBase();
+    const N = this.N; let dir = this.heading + Math.PI, cx = 0, cy = 0;
+    this.px[0] = 0; this.py[0] = 0;
+    for (let i = 1; i < N; i++) {
+      dir += this.bendTarget(i);
+      cx += Math.cos(dir) * this.rest[i - 1]; cy += Math.sin(dir) * this.rest[i - 1];
+      this.px[i] = cx; this.py[i] = cy;
+    }
+    let mx = 0, my = 0; for (let i = 0; i < N; i++) { mx += this.px[i]; my += this.py[i]; }
+    mx /= N; my /= N;
+    for (let i = 0; i < N; i++) { this.px[i] += x - mx; this.py[i] += y - my; this.ox[i] = this.px[i]; this.oy[i] = this.py[i]; }
+    this.frame(1 / 60);
+  }
+  center() { let x = 0, y = 0; for (let i = 0; i < this.N; i++) { x += this.px[i]; y += this.py[i]; } return [x / this.N, y / this.N]; }
+  setGenome(g, regrow) {
+    const [cx, cy] = this.center();
+    const segChanged = (g.segments | 0) !== this.N;
+    this.g = Object.assign({}, DEF, g);
+    if (segChanged || regrow) this.layout(cx, cy);
+    this.buildHairs();
+    if (regrow) this.grow = 0;
+  }
+  buildHairs() {
+    const g = this.g, N = this.N, R = rng(this.seed ^ 0x51ed27);
+    const H = [];
+    const add = (i, side, a, type) => H.push({ i, side, a, type, r1: R(), r2: R(), r3: R(), r4: R(), cs: R() < 0.5 ? -1 : 1, lag: 0 });
+    const count = d => Math.floor(d) + (R() < d % 1 ? 1 : 0);
+    for (let i = 0; i < N; i++) {
+      const t = N > 1 ? i / (N - 1) : 0;
+      const wW = lerp(1, Math.max(0, 1 - t * 1.3) * 2.2, g.hairFalloff);
+      const wR = lerp(1, Math.max(0, 1 - t * 1.3) * 2.2, g.redFalloff);
+      for (const side of [-1, 1]) {
+        const nw = count(g.hairDensity * wW);
+        for (let k = 0; k < nw; k++) add(i, side, (R() - 0.5) * 1.5, 0);
+        const nr = count(g.redDensity * wR);
+        for (let k = 0; k < nr; k++) add(i, side, (R() - 0.5) * 1.3, 1);
+      }
+    }
+    const nt = Math.round(g.headTuft * 8);
+    for (let k = 0; k < nt; k++) add(0, 0, (k + R()) / nt * 2.6 - 1.3, R() < 0.25 ? 1 : 0);
+    const ns = g.strandCount | 0;
+    for (let k = 0; k < ns; k++) add(Math.max(0, N - 1 - Math.floor(R() * Math.min(3, N))), 0, Math.PI + (R() - 0.5) * 0.7, 2);
+    this.hairs = H;
+  }
+  update(dt, W) {
+    const g = this.g, N = this.N;
+    this.t += dt;
+    this.grow = g.growTime > 0 ? Math.min(1, this.grow + dt / g.growTime) : 1;
+    const fs = 4.5;
+    this.fade = this.fade < this.fadeTarget ? Math.min(this.fadeTarget, this.fade + dt * fs) : Math.max(this.fadeTarget, this.fade - dt * fs);
+    if (this.pending && this.fade <= 0.001) { this.setGenome(this.pending, true); this.pending = null; this.fadeTarget = 1; }
+    this.computeBase();
+    this.peri += dt * g.periSpeed * TAU;
+
+    // --- steering
+    let turn = (noise1(this.t * g.wanderFreq + this.seed * 0.37) * 2 - 1) * g.wander * 2;
+    turn += g.slither * TAU * g.slitherFreq * Math.cos(this.t * TAU * g.slitherFreq);
+    turn += this.avoidTurn(W);
+    const lure = W.lure;
+    if (lure) {
+      const a = Math.atan2(lure.y - this.py[0], lure.x - this.px[0]);
+      turn += wrapA(a - this.heading) * 2.5;
+    }
+    this.heading = wrapA(this.heading + turn * dt);
+
+    // --- head motion
+    if (this.drag) {
+      const dx = this.drag.x - this.px[0], dy = this.drag.y - this.py[0];
+      const k = Math.min(1, dt * 10);
+      this.px[0] += dx * k; this.py[0] += dy * k;
+      if (dx * dx + dy * dy > 4) this.heading = Math.atan2(dy, dx);
+    } else {
+      let sp = g.speed * (1 + g.peristalsis * 1.5 * Math.sin(this.peri));
+      if (lure) sp = Math.max(sp, 40);
+      this.px[0] += Math.cos(this.heading) * sp * dt;
+      this.py[0] += Math.sin(this.heading) * sp * dt;
+    }
+
+    // --- body follows the head (follow-the-leader with bend memory)
+    const kS = 1 - Math.pow(1 - g.stiffness, dt * 60);
+    for (let i = 1; i < N; i++) {
+      const prevDir = i === 1 ? this.heading + Math.PI : Math.atan2(this.py[i - 1] - this.py[i - 2], this.px[i - 1] - this.px[i - 2]);
+      const cur = Math.atan2(this.py[i] - this.py[i - 1], this.px[i] - this.px[i - 1]);
+      const tgt = this.bendTarget(i);
+      let rel = wrapA(cur - prevDir);
+      rel += wrapA(tgt - rel) * kS;
+      rel = clamp(rel, tgt - g.maxBend, tgt + g.maxBend);
+      const pw = Math.sin(this.peri - i * TAU / g.periLength);
+      const L = this.rest[i - 1] * (1 + g.peristalsis * pw);
+      const a = prevDir + rel;
+      this.px[i] = this.px[i - 1] + Math.cos(a) * L;
+      this.py[i] = this.py[i - 1] + Math.sin(a) * L;
+    }
+    W.collideWalls(this);
+  }
+  avoidTurn(W) {
+    const g = this.g; if (g.avoid <= 0) return 0;
+    const hx = this.px[0], hy = this.py[0], r0 = this.r[0] || g.size;
+    const look = g.avoid * (r0 * 2.2 + 36);
+    const fx = Math.cos(this.heading), fy = Math.sin(this.heading);
+    let rx = 0, ry = 0;
+    const samples = [[hx, hy, 1], [hx + fx * look * 0.7, hy + fy * look * 0.7, 1.3]];
+    for (const [sx, sy, wt] of samples) {
+      for (const w of W.walls) {
+        const c = closestOnSeg(sx, sy, w);
+        const ex = sx - c[0], ey = sy - c[1], d = Math.hypot(ex, ey) || 1e-3;
+        const gap = d - scene.wallThickness * 0.5 - r0 * 0.8;
+        if (gap < look) { const s = Math.pow(1 - Math.max(0, gap) / look, 2) * wt; rx += ex / d * s; ry += ey / d * s; }
+      }
+      if (scene.edges) {
+        const m = r0 * 0.8;
+        const L = sx - m, Rr = W.w - m - sx, T = sy - m, Bt = W.h - m - sy;
+        if (L < look) rx += Math.pow(1 - Math.max(0, L) / look, 2) * wt;
+        if (Rr < look) rx -= Math.pow(1 - Math.max(0, Rr) / look, 2) * wt;
+        if (T < look) ry += Math.pow(1 - Math.max(0, T) / look, 2) * wt;
+        if (Bt < look) ry -= Math.pow(1 - Math.max(0, Bt) / look, 2) * wt;
+      }
+    }
+    if (scene.creatureCollide) {
+      for (const o of W.creatures) {
+        if (o === this) continue;
+        for (let j = 0; j < o.N; j += 2) {
+          const ex = hx - o.px[j], ey = hy - o.py[j], d = Math.hypot(ex, ey) || 1e-3;
+          const gap = d - o.r[j] - r0;
+          if (gap < look * 0.6) { const s = Math.pow(1 - Math.max(0, gap) / (look * 0.6), 2) * 0.5; rx += ex / d * s; ry += ey / d * s; }
+        }
+      }
+    }
+    const m = Math.hypot(rx, ry); if (m < 1e-4) return 0;
+    const desired = Math.atan2(fy + ry * 3, fx + rx * 3);
+    return wrapA(desired - this.heading) * 3.2 * Math.min(1, m * 1.5);
+  }
+  frame(dt) {
+    const g = this.g, N = this.N;
+    const ge = 0.05 + 0.95 * (1 - Math.pow(1 - this.grow, 3));
+    const br = 1 + g.breathe * Math.sin(this.t * TAU * g.breatheSpeed);
+    for (let i = 0; i < N; i++) {
+      const pw = Math.sin(this.peri - i * TAU / g.periLength);
+      this.r[i] = this.rb[i] * ge * br * (1 - g.peristalsis * 0.6 * pw);
+      let ax, ay;
+      if (i === 0) { ax = this.px[0] - this.px[1]; ay = this.py[0] - this.py[1]; }
+      else if (i === N - 1) { ax = this.px[N - 2] - this.px[N - 1]; ay = this.py[N - 2] - this.py[N - 1]; }
+      else { ax = this.px[i - 1] - this.px[i + 1]; ay = this.py[i - 1] - this.py[i + 1]; }
+      const l = Math.hypot(ax, ay) || 1; this.tx[i] = ax / l; this.ty[i] = ay / l;
+      const vx = (this.px[i] - this.ox[i]) / Math.max(dt, 1e-4), vy = (this.py[i] - this.oy[i]) / Math.max(dt, 1e-4);
+      this.vx[i] = lerp(this.vx[i], vx, 0.2); this.vy[i] = lerp(this.vy[i], vy, 0.2);
+      this.ox[i] = this.px[i]; this.oy[i] = this.py[i];
+    }
+    this.u[0] = 0;
+    for (let i = 1; i < N; i++) this.u[i] = this.u[i - 1] + Math.hypot(this.px[i] - this.px[i - 1], this.py[i] - this.py[i - 1]);
+    for (let i = 0; i < N; i++) {
+      const a = Math.max(0, i - 1), b = Math.min(N - 1, i + 1);
+      const c = wrapA(Math.atan2(this.ty[a], this.tx[a]) - Math.atan2(this.ty[b], this.tx[b]));
+      this.curv[i] = lerp(this.curv[i], c, 0.3);
+    }
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    const e = Math.max(1, g.elong);
+    for (let i = 0; i < N; i++) {
+      const rr = this.r[i] * e;
+      x0 = Math.min(x0, this.px[i] - rr); y0 = Math.min(y0, this.py[i] - rr);
+      x1 = Math.max(x1, this.px[i] + rr); y1 = Math.max(y1, this.py[i] + rr);
+    }
+    this.bbox = [x0, y0, x1, y1];
+  }
+}
+
+function closestOnSeg(x, y, w) {
+  const dx = w[2] - w[0], dy = w[3] - w[1], L2 = dx * dx + dy * dy || 1e-6;
+  const t = clamp(((x - w[0]) * dx + (y - w[1]) * dy) / L2, 0, 1);
+  return [w[0] + dx * t, w[1] + dy * t];
+}
+function crosses(ax, ay, bx, by, w) {
+  const ex = bx - ax, ey = by - ay, fx = w[2] - w[0], fy = w[3] - w[1];
+  const d1 = ex * (w[1] - ay) - ey * (w[0] - ax), d2 = ex * (w[3] - ay) - ey * (w[2] - ax);
+  const d3 = fx * (ay - w[1]) - fy * (ax - w[0]), d4 = fx * (by - w[1]) - fy * (bx - w[0]);
+  return d1 * d2 < 0 && d3 * d4 < 0;
+}
+function pushOut(x, y, rad, out) {
+  for (const w of world.walls) {
+    const c = closestOnSeg(x, y, w);
+    let ex = x - c[0], ey = y - c[1]; const d = Math.hypot(ex, ey), m = rad + scene.wallThickness * 0.5;
+    if (d < m) {
+      if (d < 1e-4) { ex = -(w[3] - w[1]); ey = w[2] - w[0]; const l = Math.hypot(ex, ey) || 1; ex /= l; ey /= l; }
+      else { ex /= d; ey /= d; }
+      x = c[0] + ex * m; y = c[1] + ey * m;
+    }
+  }
+  out[0] = x; out[1] = y;
+}
+
+/* ============================================================
+   World
+   ============================================================ */
+const world = {
+  creatures: [], walls: [], spores: [], w: 800, h: 600, rw: 800, rh: 600, lure: null,
+  collideWalls(c) {
+    const o = [0, 0], N = c.N, k = c.g.collide;
+    for (let i = 0; i < N; i++) {
+      const rad = c.r[i] * k;
+      let x = c.px[i], y = c.py[i];
+      if (this.walls.length) {
+        // never let a segment tunnel through a wall between two steps: slide it along the wall instead
+        for (const w of this.walls) if (crosses(c.ox[i], c.oy[i], x, y, w)) {
+          const fx = w[2] - w[0], fy = w[3] - w[1], L = Math.hypot(fx, fy) || 1, nx = -fy / L, ny = fx / L;
+          const sg = ((c.ox[i] - w[0]) * nx + (c.oy[i] - w[1]) * ny) >= 0 ? 1 : -1;
+          const sNew = (x - w[0]) * nx + (y - w[1]) * ny, m = rad + scene.wallThickness * 0.5;
+          // a body segment may cross only to follow the segment ahead of it (heals a body split by a new wall)
+          if (i > 0 && Math.sign((c.px[i - 1] - w[0]) * nx + (c.py[i - 1] - w[1]) * ny) === Math.sign(sNew)) continue;
+          x -= nx * (sNew - sg * m); y -= ny * (sNew - sg * m);
+        }
+        pushOut(x, y, rad, o); x = o[0]; y = o[1];
+      }
+      if (scene.edges) { const m = Math.min(rad, Math.min(this.w, this.h) * 0.3); x = clamp(x, m, this.w - m); y = clamp(y, m, this.h - m); }
+      if (i === 0 && (x !== c.px[0] || y !== c.py[0])) {
+        // slide the heading along whatever the head bumped into
+        const nx = x - c.px[0], ny = y - c.py[0], nl = Math.hypot(nx, ny) || 1;
+        const hx = Math.cos(c.heading), hy = Math.sin(c.heading), dn = hx * nx / nl + hy * ny / nl;
+        if (dn < 0) c.heading = Math.atan2(hy - dn * ny / nl * 1.2, hx - dn * nx / nl * 1.2);
+      }
+      c.px[i] = x; c.py[i] = y;
+    }
+  },
+  collideCreatures() {
+    if (!scene.creatureCollide) return;
+    const cs = this.creatures;
+    for (let a = 0; a < cs.length; a++) for (let b = a + 1; b < cs.length; b++) {
+      const A = cs[a], Bc = cs[b];
+      if (A.bbox[2] < Bc.bbox[0] || Bc.bbox[2] < A.bbox[0] || A.bbox[3] < Bc.bbox[1] || Bc.bbox[3] < A.bbox[1]) continue;
+      const k = (A.g.collide + Bc.g.collide) * 0.5;
+      for (let i = 0; i < A.N; i++) for (let j = 0; j < Bc.N; j++) {
+        const dx = Bc.px[j] - A.px[i], dy = Bc.py[j] - A.py[i], m = (A.r[i] + Bc.r[j]) * k, d2 = dx * dx + dy * dy;
+        if (d2 < m * m && d2 > 1e-6) {
+          const d = Math.sqrt(d2), p = (m - d) * 0.5 / d;
+          A.px[i] -= dx * p; A.py[i] -= dy * p; Bc.px[j] += dx * p; Bc.py[j] += dy * p;
+        }
+      }
+    }
+  },
+  step(dt) {
+    for (const c of this.creatures) c.update(dt, this);
+    if (scene.creatureCollide && this.creatures.length > 1) {
+      this.collideCreatures();
+      for (const c of this.creatures) this.collideWalls(c);
+    }
+    for (const c of this.creatures) c.frame(dt);
+    this.updateSpores(dt);
+    if (scene.gallery && this.creatures.length) {
+      this.galleryT = (this.galleryT || 0) + dt;
+      if (this.galleryT > scene.galleryInterval) {
+        this.galleryT = 0;
+        this.galleryIdx = ((this.galleryIdx ?? PRESET_ORDER.indexOf(scene.preset)) + 1) % PRESET_ORDER.length;
+        scene.preset = PRESET_ORDER[this.galleryIdx];
+        for (const c of this.creatures) { c.pending = presetGenome(scene.preset); c.fadeTarget = 0; }
+        ui.syncPreset();
+        setTimeout(() => ui.sync(), 300);
+      }
+    }
+  },
+  updateSpores(dt) {
+    for (const c of this.creatures) {
+      const g = c.g; if (g.sporeRate <= 0 || c.grow < 0.5) continue;
+      c.sporeAcc += g.sporeRate * dt;
+      while (c.sporeAcc >= 1) {
+        c.sporeAcc -= 1;
+        if (this.spores.length > 1500) break;
+        const i = (Math.random() * c.N) | 0, a = Math.random() * TAU;
+        const r = c.r[i];
+        this.spores.push({
+          x: c.px[i] + Math.cos(a) * r, y: c.py[i] + Math.sin(a) * r,
+          vx: Math.cos(a) * (6 + Math.random() * 18) + c.vx[i] * 0.3, vy: Math.sin(a) * (6 + Math.random() * 18) + c.vy[i] * 0.3,
+          life: 0, max: g.sporeLife * (0.5 + Math.random()), size: g.sporeSize * (0.5 + Math.random()) * g.size / 36,
+          red: Math.random() < 0.45, c, seed: Math.random() * 100,
+        });
+      }
+    }
+    const sp = this.spores;
+    for (let i = sp.length - 1; i >= 0; i--) {
+      const s = sp[i]; s.life += dt;
+      if (s.life > s.max) { sp.splice(i, 1); continue; }
+      s.vx *= Math.pow(0.35, dt); s.vy *= Math.pow(0.35, dt);
+      s.vx += (noise1(s.seed + s.life * 0.7) - 0.5) * 30 * dt; s.vy += (noise1(s.seed + 50 + s.life * 0.7) - 0.5) * 30 * dt - 3 * dt;
+      s.x += s.vx * dt; s.y += s.vy * dt;
+    }
+  },
+};
+
+/* ============================================================
+   WebGL setup
+   ============================================================ */
+const $ = id => document.getElementById(id);
+const cv = document.getElementById('gl');
+const ov = document.getElementById('ov');
+const octx = ov.getContext('2d');
+const gl = cv.getContext('webgl2', { antialias: false, alpha: false, premultipliedAlpha: false, preserveDrawingBuffer: false });
+if (!gl) {
+  const e = document.getElementById('err');
+  e.style.display = 'flex';
+  e.textContent = 'This simulator needs WebGL2. Open it in a current Chrome, Safari, Firefox or Edge.';
+  return;
+}
+
+const GLSL_NOISE = `
+float hash12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * .1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
+vec2 hash22(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * vec3(.1031, .1030, .0973)); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.xx + p3.yz) * p3.zy); }
+float vnoise(vec2 p){ vec2 i = floor(p), f = fract(p); vec2 u = f*f*(3.0-2.0*f);
+  return mix(mix(hash12(i), hash12(i+vec2(1,0)), u.x), mix(hash12(i+vec2(0,1)), hash12(i+vec2(1,1)), u.x), u.y); }
+vec3 mod289(vec3 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+vec4 mod289(vec4 x){ return x - floor(x * (1.0/289.0)) * 289.0; }
+vec4 permute(vec4 x){ return mod289(((x*34.0)+1.0)*x); }
+vec4 taylorInvSqrt(vec4 r){ return 1.79284291400159 - 0.85373472095314 * r; }
+float snoise(vec3 v){
+  const vec2 C = vec2(1.0/6.0, 1.0/3.0);
+  const vec4 D = vec4(0.0, 0.5, 1.0, 2.0);
+  vec3 i = floor(v + dot(v, C.yyy));
+  vec3 x0 = v - i + dot(i, C.xxx);
+  vec3 g = step(x0.yzx, x0.xyz);
+  vec3 l = 1.0 - g;
+  vec3 i1 = min(g.xyz, l.zxy);
+  vec3 i2 = max(g.xyz, l.zxy);
+  vec3 x1 = x0 - i1 + C.xxx;
+  vec3 x2 = x0 - i2 + C.yyy;
+  vec3 x3 = x0 - D.yyy;
+  i = mod289(i);
+  vec4 p = permute(permute(permute(i.z + vec4(0.0, i1.z, i2.z, 1.0)) + i.y + vec4(0.0, i1.y, i2.y, 1.0)) + i.x + vec4(0.0, i1.x, i2.x, 1.0));
+  float n_ = 0.142857142857;
+  vec3 ns = n_ * D.wyz - D.xzx;
+  vec4 j = p - 49.0 * floor(p * ns.z * ns.z);
+  vec4 x_ = floor(j * ns.z);
+  vec4 y_ = floor(j - 7.0 * x_);
+  vec4 x = x_ * ns.x + ns.yyyy;
+  vec4 y = y_ * ns.x + ns.yyyy;
+  vec4 h = 1.0 - abs(x) - abs(y);
+  vec4 b0 = vec4(x.xy, y.xy);
+  vec4 b1 = vec4(x.zw, y.zw);
+  vec4 s0 = floor(b0)*2.0 + 1.0;
+  vec4 s1 = floor(b1)*2.0 + 1.0;
+  vec4 sh = -step(h, vec4(0.0));
+  vec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy;
+  vec4 a1 = b1.xzyw + s1.xzyw*sh.zzww;
+  vec3 p0 = vec3(a0.xy, h.x);
+  vec3 p1 = vec3(a0.zw, h.y);
+  vec3 p2 = vec3(a1.xy, h.z);
+  vec3 p3 = vec3(a1.zw, h.w);
+  vec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2,p2), dot(p3,p3)));
+  p0 *= norm.x; p1 *= norm.y; p2 *= norm.z; p3 *= norm.w;
+  vec4 m = max(0.6 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.0);
+  m = m * m;
+  return 42.0 * dot(m*m, vec4(dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3)));
+}
+vec2 worley(vec2 p, float t){
+  vec2 i = floor(p), f = fract(p); float F1 = 8.0, F2 = 8.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y));
+    vec2 o = hash22(i + g);
+    o = 0.5 + 0.42 * sin(t + 6.2831 * o);
+    vec2 r = g + o - f; float d = dot(r, r);
+    if (d < F1) { F2 = F1; F1 = d; } else if (d < F2) { F2 = d; }
+  }
+  return sqrt(vec2(F1, F2));
+}`;
+
+const BODY_VS = `#version 300 es
+layout(location=0) in vec2 aPos;
+uniform vec2 uRes;
+out vec2 vW;
+void main(){ vW = aPos; vec2 c = aPos / uRes * 2.0 - 1.0; gl_Position = vec4(c.x, -c.y, 0.0, 1.0); }`;
+
+const BODY_FS = `#version 300 es
+precision highp float;
+#define MAXN ${MAXN}
+#define TAU 6.28318530718
+in vec2 vW; out vec4 o;
+uniform vec4 uNode[MAXN];   // x, y, radius, arclength-from-head
+uniform vec4 uTan[MAXN];    // tangent.xy (toward head), curvature, headness
+uniform int uN, uHeadTop;
+uniform float uR0, uLen, uTime, uSeed, uAA, uPx, uAlpha, uElong;
+uniform vec3 uHead; uniform vec2 uHeadDir;
+uniform vec3 cSkin, cSkinHi, cInk, cInkMid, cRim, cLightRim, cAccent, cAccent2, cMembrane, cHole, cHoleGlow;
+uniform vec4 pInkA, pInkB, pInkC, pInkD, pInkE, pInkF, pInkG, pSkin, pSkin2, pRim, pRim2, pHead, pCell, pMem;
+${GLSL_NOISE}
+
+vec3 shade(int i, vec2 p, bool interior, out float din){
+  vec4 N = uNode[i]; vec4 T = uTan[i];
+  vec2 t = T.xy;
+  vec2 d = p - N.xy;
+  float al = dot(d, t), ac = t.x*d.y - t.y*d.x;
+  float r = N.z;
+  vec2 e = vec2(al/(r*uElong), ac/r);
+  float q = length(e);
+  din = (1.0 - q) * r;
+  float tm = uTime * pInkE.y;
+  float U = (N.w - al) / uR0;
+  float V = ac / r;
+  float tt = clamp((N.w - al) / max(uLen, 1.0), 0.0, 1.0);
+  float ang = atan(e.y, e.x);
+  vec2 cs = vec2(cos(ang), sin(ang));
+  float wU = U, wV = V;
+  if (pInkE.z > 0.0) {
+    wV += pInkE.z * (vnoise(vec2(U*0.8, tm*0.5 + 3.0)) - 0.5);
+    wU += pInkE.z * (vnoise(vec2(U*0.5 + 11.0, V*0.8 + tm*0.5)) - 0.5);
+  }
+  float fa = pInkA.w, ff = pInkD.z, soft = pInkD.w, dep = max(pInkG.x, 0.01);
+  float hn = T.w, notHead = 1.0 - hn;
+  float ink = 0.0, deep = 0.0;
+  // coverage (feathered edge) and depth (how far inside the ink a pixel is)
+  #define ACC(amt, f, th) { float s_ = smoothstep((th) - soft, (th) + soft, f); float d_ = smoothstep(th, (th) + dep, f); ink = max(ink, (amt)*s_); deep = max(deep, (amt)*d_); }
+  // end caps (front of the head, tip of the tail) use the disc's polar frame,
+  // everything else uses body coordinates so patterns run continuously along the body
+  float cap = 0.0;
+  if (i == 0) cap = smoothstep(-0.1, 0.55, e.x);
+  if (i == uN - 1) cap = max(cap, smoothstep(-0.1, 0.55, -e.x));
+  float bodyQ = mix(abs(V), q, cap);
+  // edge streaks: dark ink creeping in from the rim, combed perpendicular to the edge
+  if (pInkA.x > 0.0) {
+    float k = pInkA.z * r / uR0;
+    float sd = sign(V + 1e-4)*7.0;
+    float a = wU*pInkA.z*0.32, c = abs(V);
+    float ns = 0.55*snoise(vec3(a, c*1.2 + tm, sd)) + 0.3*snoise(vec3(a*2.6, c*2.0 - tm, sd + 3.0)) + 0.22*snoise(vec3(a*6.5, c*1.4, sd + 5.0));
+    float nc = 0.55*snoise(vec3(cs*k, q*1.2 + tm + float(i)*1.7)) + 0.3*snoise(vec3(cs*k*2.6, q*2.0 - tm + float(i)*0.37)) + 0.22*snoise(vec3(cs*k*6.5, q*1.4 + float(i)*0.71));
+    float f = bodyQ + fa*0.3*mix(ns, nc, cap);
+    ACC(pInkA.x, f, pInkA.y);
+  }
+  // longitudinal stripes with comb-feathered edges
+  if (pInkB.x > 0.0) {
+    float n = 0.4*snoise(vec3(wU*ff*0.6, wV*1.3, tm + 3.0)) + 0.3*snoise(vec3(wU*ff*2.3, wV*1.6, tm + 7.0)) + 0.3*snoise(vec3(wU*ff*6.0, wV*1.1, 11.0)) + 0.18*snoise(vec3(wU*ff*13.0, wV*0.9, 13.0));
+    float sv = (wV*0.5 + 0.5)*pInkB.y + pInkB.w + fa*0.12*n;
+    float f = 1.0 - abs(fract(sv) - 0.5)*2.0;
+    float m = smoothstep(pInkF.x - 0.08, pInkF.x + 0.08, tt) * notHead;
+    ACC(pInkB.x*m, f, 1.0 - pInkB.z);
+  }
+  // transverse bands (checkered across the midline)
+  if (pInkC.x > 0.0) {
+    float n = 0.45*snoise(vec3(wU*0.9, wV*ff*0.4, tm + 13.0)) + 0.3*snoise(vec3(wU*1.7, wV*ff*1.3, tm + 17.0)) + 0.28*snoise(vec3(wU*1.3, wV*ff*3.5, 19.0));
+    float su = wU/pInkC.y + fa*0.11*n + pInkC.w*0.5*step(0.0, V);
+    float f = 1.0 - abs(fract(su) - 0.5)*2.0;
+    float m = (1.0 - smoothstep(pInkF.y - 0.06, pInkF.y + 0.06, tt)) * notHead;
+    ACC(pInkC.x*m, f, 1.0 - pInkC.z);
+  }
+  // side shadow
+  if (pInkD.x > 0.0) {
+    float sideS = pInkD.y < 0.5 ? clamp(T.z*8.0, -1.0, 1.0) : (pInkD.y < 1.5 ? 1.0 : (pInkD.y < 2.5 ? -1.0 : -clamp(T.z*8.0, -1.0, 1.0)));
+    float n = 0.55*snoise(vec3(wU*ff, wV*1.1, tm + 23.0)) + 0.3*snoise(vec3(wU*ff*2.1, wV*2.0, tm + 29.0)) + 0.22*snoise(vec3(wU*ff*5.0, wV*1.5, 37.0));
+    float rib = abs(fract(wU/pInkC.y + 0.25) - 0.5)*2.0;
+    float f = V*sign(sideS) + fa*0.3*n + pInkG.y*(rib - 0.5)*0.9*notHead;
+    ACC(pInkD.x*abs(sideS), f, 1.0 - 2.0*pInkF.z);
+  }
+  // fine light comb lines running through the ink
+  if (pInkE.x > 0.0 && ink > 0.01) {
+    float dn = snoise(vec3(wU*ff*3.2, wV*2.4, tm*0.7 + 31.0));
+    float dl = 1.0 - pInkE.x * smoothstep(0.35, 0.7, dn);
+    ink *= dl; deep *= dl;
+  }
+
+  float shapeQ = mix(bodyQ, q, pSkin2.y);
+  vec3 col = mix(cSkin, cSkinHi, pSkin.x * (1.0 - shapeQ*shapeQ));
+
+  // speckles
+  if (pSkin.y > 0.0) {
+    vec2 sp = vec2(U, V*r/uR0) * pSkin.z;
+    vec2 ci = floor(sp), cf = fract(sp);
+    float h0 = hash12(ci + uSeed*0.1);
+    if (h0 < pSkin.y) {
+      vec2 c0 = 0.25 + 0.5*hash22(ci + 17.0);
+      float rad = 0.07 + 0.14*hash12(ci + 5.3);
+      float dd = length((cf - c0)*vec2(1.0, 0.6 + 0.8*h0/max(pSkin.y,1e-3)));
+      float px = uAA*pSkin.z/uR0;
+      float dt = 1.0 - smoothstep(rad - px, rad + px, dd);
+      col = mix(col, cInk, dt * 0.92 * (1.0 - 0.5*ink));
+    }
+  }
+  // cellular voids
+  if (pCell.x > 0.0) {
+    vec2 cp = vec2(U, V*r/uR0) * pCell.y + uSeed*0.37;
+    cp += 0.32*vec2(snoise(vec3(cp*0.9, tm + 3.0)), snoise(vec3(cp*0.9 + 5.0, tm + 7.0)));
+    vec2 Fw = worley(cp, uTime*0.35);
+    float edge = Fw.y - Fw.x;
+    float mw = pCell.z * (0.6 + 0.8*vnoise(cp*3.5));
+    float hole = smoothstep(mw, mw + 0.1, edge) * (1.0 - smoothstep(0.55, 0.9, Fw.x)) * (1.0 - smoothstep(0.62, 0.82, q));
+    float glow = pCell.w * (1.0 - smoothstep(0.0, 0.62, Fw.x)) * (0.55 + 0.45*snoise(vec3(cp*0.7, tm + 41.0)));
+    vec3 hc = mix(cHole, cHoleGlow, clamp(glow, 0.0, 1.0));
+    col = mix(col, hc, hole * pCell.x);
+  }
+  // ink: midtone at the feathered fringe, full ink deeper in
+  col = mix(col, cInkMid, ink * pInkE.w);
+  col = mix(col, cInk, max(deep, ink*(1.0 - pInkE.w)));
+
+  // head patterns
+  if (hn > 0.0 && pHead.x > 0.5) {
+    vec2 hd = p - uHead.xy;
+    vec2 hl = vec2(dot(hd, uHeadDir), uHeadDir.x*hd.y - uHeadDir.y*hd.x) / uHead.z;
+    float hr = length(hl);
+    if (pHead.x < 1.5) {
+      float ha = atan(hl.y, hl.x);
+      float wob = 0.22*snoise(vec3(hl*1.8, tm + 51.0));
+      float L = abs(fract(ha/TAU*pHead.y + wob) - 0.5)*2.0;
+      float aaL = 2.0*pHead.y*uAA / (TAU*max(hr, 0.02)*uHead.z);
+      float lw = 0.26;
+      float line = 1.0 - smoothstep(lw - aaL, lw + aaL, L);
+      line *= smoothstep(0.16, 0.42, hr) * (1.0 - smoothstep(0.82, 1.0, hr)) * smoothstep(lw*3.0, lw, aaL);
+      col = mix(col, mix(cInkMid, cInk, 0.6), line * pHead.z * hn);
+      float glow = exp(-hr*hr*11.0) * pHead.w;
+      col = mix(col, cSkinHi, clamp(glow, 0.0, 1.0) * hn);
+    } else {
+      float amt = pHead.z * hn;
+      float inner = 1.0 - smoothstep(0.76, 0.8, hr);
+      float gapN = snoise(vec3(hl*3.2, tm + 71.0));
+      vec3 cav = mix(mix(cInkMid, cSkin, 0.25), cInk, 0.25 + 0.3*gapN);
+      cav = mix(cav, mix(cAccent, cAccent2, 0.5 + 0.5*gapN), smoothstep(0.3, 0.6, gapN) * 0.8);
+      col = mix(col, cav, inner * amt * 0.9);
+      col = mix(col, cRim, (1.0 - smoothstep(0.012, 0.03, abs(hr - 0.8))) * 0.8 * amt);
+      // pale vesicles packed inside the face ring
+      float fseed = floor(uSeed*0.01);
+      for (int b = 0; b < 12; b++) {
+        vec2 hb = hash22(vec2(float(b)*7.1 + fseed, 3.0));
+        float a = float(b)/12.0*TAU*1.9 + (hb.x - 0.5)*0.6;
+        float rr = b < 2 ? 0.12*float(b) : 0.3 + 0.32*hb.y;
+        vec2 bc = vec2(cos(a), sin(a))*rr + vec2(0.05, 0.1);
+        float br = b == 0 ? 0.15 : 0.08 + 0.08*hash12(vec2(float(b), 9.0 + fseed));
+        vec2 bdv = (hl - bc)/br; float bd = length(bdv);
+        if (bd < 1.15) {
+          vec3 bcol = mix(cSkinHi, mix(cSkin, cInkMid, 0.25), smoothstep(0.55, 1.0, bd) * 0.7);
+          col = mix(col, bcol, (1.0 - smoothstep(0.94, 1.0, bd)) * amt * inner);
+          col = mix(col, cRim, (1.0 - smoothstep(0.0, 0.1, abs(bd - 1.0))) * amt * inner * 0.9);
+        }
+      }
+      // fine pale filaments looping across the cavity
+      float sl = abs(fract(atan(hl.y, hl.x)/TAU*14.0 + hr*2.2 + 0.25*snoise(vec3(hl*2.0, tm))) - 0.5);
+      col = mix(col, cSkinHi, (1.0 - smoothstep(0.02, 0.06, sl)) * inner * smoothstep(0.2, 0.5, hr) * 0.45 * amt);
+      // the eye: a big glossy sphere in the lower half
+      vec2 ec = vec2(-0.05, -0.32); float er = 0.42;
+      vec2 ed = (hl - ec)/er; float de = length(ed);
+      if (de < 1.1) {
+        vec3 eyeC = mix(mix(cInkMid, cSkin, 0.25), cInk, smoothstep(0.0, 1.1, de - 0.35*ed.y));
+        eyeC = mix(eyeC, cSkinHi, (1.0 - smoothstep(0.0, 0.3, length(ed - vec2(0.25, 0.42)))) * 0.6);
+        eyeC = mix(eyeC, cSkinHi*0.85, (1.0 - smoothstep(0.012, 0.04, abs(de - 0.84))) * 0.5);
+        col = mix(col, eyeC, (1.0 - smoothstep(0.97, 1.0, de)) * amt);
+        col = mix(col, cRim, (1.0 - smoothstep(0.0, 0.045, abs(de - 1.0))) * amt);
+      }
+    }
+  }
+  // red flecks near the rim
+  if (pSkin2.x > 0.0) {
+    float an = snoise(vec3(U*4.0, V*3.0, tm + 61.0));
+    float red = smoothstep(0.48, 0.62, an) * smoothstep(0.5, 0.88, bodyQ) * pSkin2.x;
+    col = mix(col, mix(cAccent, cAccent2, smoothstep(0.5, 0.9, an)), red);
+  }
+  col *= 1.0 - pSkin.w * pow(shapeQ, 5.0);
+  // light rim (thick bright membrane around each segment)
+  if (pRim.z > 0.0) {
+    float n1 = snoise(vec3(cs*3.0, tm + float(i)));
+    float lr = smoothstep(1.0 - pRim.w - 0.025 + 0.035*n1, 1.0 - pRim.w + 0.025 + 0.035*n1, q);
+    col = mix(col, cLightRim, lr * pRim.z);
+  }
+  // dark outline: silhouette, or interior segment arc
+  float rimW = pRim.x * uPx;
+  float line = 1.0 - smoothstep(rimW, rimW + uAA, din);
+  float lamt = interior ? (mod(float(i), pRim2.y) < 0.5 ? pRim2.x : 0.0) : pRim.y;
+  col = mix(col, cRim, line * lamt);
+  return col;
+}
+
+void main(){
+  vec2 p = vW;
+  float aa = uAA;
+  int top = -1, sec = -1;
+  float dOut = 1e9, below = 1e9;
+  for (int k = 0; k < MAXN; k++) {
+    if (k >= uN) break;
+    int i = (uHeadTop == 1) ? (uN - 1 - k) : k;
+    vec4 N = uNode[i]; vec2 t = uTan[i].xy;
+    vec2 d = p - N.xy;
+    float al = dot(d, t), ac = t.x*d.y - t.y*d.x;
+    float q = length(vec2(al/(N.z*uElong), ac/N.z));
+    float sd = (q - 1.0) * N.z;
+    dOut = min(dOut, sd);
+    if (top < 0) { if (sd < aa) top = i; }
+    else { below = min(below, sd); if (sec < 0 && sd < aa) sec = i; }
+  }
+  vec4 res = vec4(0.0);
+  if (top >= 0) {
+    float rimW = pRim.x * uPx;
+    bool interior = below < -(rimW + 2.0*aa);
+    float din;
+    vec3 c = shade(top, p, interior, din);
+    float cov = clamp(din/aa + 0.5, 0.0, 1.0);
+    if (cov < 1.0 && sec >= 0) {
+      float din2; vec3 c2 = shade(sec, p, false, din2);
+      float cov2 = clamp(din2/aa + 0.5, 0.0, 1.0);
+      res = vec4(c*cov + c2*cov2*(1.0 - cov), cov + cov2*(1.0 - cov));
+    } else {
+      res = vec4(c*cov, cov);
+    }
+  }
+  if (pMem.x > 0.0 && dOut > -aa) {
+    float off = pMem.y * uR0 / 40.0;
+    float wob = (vnoise(p/uR0*2.5 + vec2(uTime*0.15, 0.0)) - 0.5) * (off*1.2 + 2.0*uPx);
+    float md = abs(dOut - off - wob);
+    float lw = max(0.55*uPx, 0.5*aa);
+    float m = (1.0 - smoothstep(lw, lw + aa, md)) * (0.55 + 0.45*vnoise(p/uR0*6.0));
+    float bn = vnoise(p/uR0*16.0 + 7.0);
+    float bead = smoothstep(0.7, 0.8, bn) * pMem.z;
+    float bw = lw*2.8;
+    float mb = (1.0 - smoothstep(bw, bw + aa, md)) * bead;
+    float ma = max(m, mb) * pMem.x * smoothstep(-aa, aa, dOut) * smoothstep(0.32, 0.48, vnoise(p/uR0*0.9 + 13.0));
+    vec3 mc = mb > m ? mix(cMembrane, cInk, 0.65) : cMembrane;
+    res.rgb += mc * ma * (1.0 - res.a);
+    res.a += ma * (1.0 - res.a);
+  }
+  o = res * uAlpha;
+}`;
+
+const HAIR_VS = `#version 300 es
+layout(location=0) in vec2 aPos;
+layout(location=1) in vec4 aA;
+layout(location=2) in vec3 aCol;
+layout(location=3) in vec3 aLine;
+uniform vec2 uRes;
+out float vAc; out float vCore; out float vAlpha; out vec3 vCol; out vec3 vLine;
+void main(){
+  vec2 c = aPos / uRes * 2.0 - 1.0; gl_Position = vec4(c.x, -c.y, 0.0, 1.0);
+  vAc = aA.x; vCore = aA.y; vAlpha = aA.z; vCol = aCol; vLine = aLine;
+}`;
+const HAIR_FS = `#version 300 es
+precision highp float;
+in float vAc; in float vCore; in float vAlpha; in vec3 vCol; in vec3 vLine;
+out vec4 o;
+uniform float uAlpha;
+void main(){
+  float a = abs(vAc);
+  float w = max(fwidth(vAc), 1e-4);
+  float cov = 1.0 - smoothstep(1.0 - w*1.4, 1.0, a);
+  float core = 1.0 - smoothstep(vCore - w, vCore + w, a);
+  vec3 c = mix(vLine, vCol, core);
+  float al = cov * vAlpha * uAlpha;
+  o = vec4(c*al, al);
+}`;
+
+const POST_VS = `#version 300 es
+out vec2 vUv;
+void main(){ vec2 p = vec2(float((gl_VertexID << 1) & 2), float(gl_VertexID & 2)); vUv = p; gl_Position = vec4(p*2.0 - 1.0, 0.0, 1.0); }`;
+const POST_FS = `#version 300 es
+precision highp float;
+in vec2 vUv; out vec4 o;
+uniform sampler2D uTex; uniform vec3 uBg; uniform vec2 uRes;
+uniform float uVig, uGrain, uExpo, uContrast, uSat, uTime, uSoft;
+void main(){
+  vec4 s = texture(uTex, vUv);
+  if (uSoft > 0.0) {
+    vec2 px = 1.0 / uRes;
+    vec4 b = (texture(uTex, vUv + px*vec2(1.2, 0.4)) + texture(uTex, vUv + px*vec2(-0.4, 1.2)) + texture(uTex, vUv + px*vec2(-1.2, -0.4)) + texture(uTex, vUv + px*vec2(0.4, -1.2))) * 0.25;
+    s = mix(s, b, uSoft);
+  }
+  vec3 c = s.rgb + uBg * (1.0 - s.a);
+  c *= uExpo;
+  c = (c - 0.5) * uContrast + 0.5;
+  float l = dot(c, vec3(0.299, 0.587, 0.114));
+  c = mix(vec3(l), c, uSat);
+  vec2 q = vUv - 0.5; q.x *= uRes.x / uRes.y;
+  c *= 1.0 - uVig * smoothstep(0.25, 1.0, length(q) * 1.15);
+  float g = fract(sin(dot(gl_FragCoord.xy + fract(uTime * 7.13) * 91.7, vec2(12.9898, 78.233))) * 43758.5453);
+  c += (g - 0.5) * uGrain;
+  o = vec4(clamp(c, 0.0, 1.0), 1.0);
+}`;
+
+function compile(src, type) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, compile(vs, gl.VERTEX_SHADER)); gl.attachShader(p, compile(fs, gl.FRAGMENT_SHADER));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const info = gl.getActiveUniform(p, i); u[info.name.replace(/\[0\]$/, '')] = gl.getUniformLocation(p, info.name); }
+  return { p, u };
+}
+let bodyP, hairP, postP;
+try {
+  bodyP = program(BODY_VS, BODY_FS); hairP = program(HAIR_VS, HAIR_FS); postP = program(POST_VS, POST_FS);
+} catch (e) {
+  const el = document.getElementById('err'); el.style.display = 'flex'; el.textContent = 'Shader error: ' + e.message; console.error(e); return;
+}
+
+// body quad
+const bodyVAO = gl.createVertexArray(); gl.bindVertexArray(bodyVAO);
+const bodyBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, bodyBuf);
+gl.bufferData(gl.ARRAY_BUFFER, 8 * 4, gl.DYNAMIC_DRAW);
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+const quad = new Float32Array(8);
+
+// hair strips
+const hairVAO = gl.createVertexArray(); gl.bindVertexArray(hairVAO);
+const hairBuf = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, hairBuf);
+const hairIdx = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, hairIdx);
+const st = FPV * 4;
+gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 2, gl.FLOAT, false, st, 0);
+gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 4, gl.FLOAT, false, st, 8);
+gl.enableVertexAttribArray(2); gl.vertexAttribPointer(2, 3, gl.FLOAT, false, st, 24);
+gl.enableVertexAttribArray(3); gl.vertexAttribPointer(3, 3, gl.FLOAT, false, st, 36);
+let hairCap = 0, hairData = new Float32Array(0);
+function ensureHairCap(n) {
+  if (n <= hairCap) return;
+  hairCap = Math.ceil(n * 1.5) + 256;
+  hairData = new Float32Array(hairCap * HP * 2 * FPV);
+  const idx = new Uint32Array(hairCap * (HP - 1) * 6); let o = 0;
+  for (let h = 0; h < hairCap; h++) {
+    const b = h * HP * 2;
+    for (let k = 0; k < HP - 1; k++) {
+      const v = b + 2 * k;
+      idx[o++] = v; idx[o++] = v + 1; idx[o++] = v + 2; idx[o++] = v + 1; idx[o++] = v + 3; idx[o++] = v + 2;
+    }
+  }
+  gl.bindVertexArray(hairVAO);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, hairIdx); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, idx, gl.STATIC_DRAW);
+  gl.bindBuffer(gl.ARRAY_BUFFER, hairBuf); gl.bufferData(gl.ARRAY_BUFFER, hairData.byteLength, gl.DYNAMIC_DRAW);
+}
+const postVAO = gl.createVertexArray();
+gl.bindVertexArray(null);
+
+// offscreen target
+let fbo = null, fboTex = null, fbW = 0, fbH = 0;
+function ensureFBO(w, h) {
+  if (w === fbW && h === fbH && fbo) return;
+  fbW = w; fbH = h;
+  if (fboTex) gl.deleteTexture(fboTex);
+  if (fbo) gl.deleteFramebuffer(fbo);
+  fboTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, fboTex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  fbo = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, fboTex, 0);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+/* ============================================================
+   Rendering
+   ============================================================ */
+let dpr = 1, cssW = 0, cssH = 0, pxW = 0, pxH = 0;
+function resize() {
+  cssW = window.innerWidth; cssH = window.innerHeight;
+  dpr = Math.min(window.devicePixelRatio || 1, 2) * scene.renderScale;
+  pxW = Math.max(1, Math.round(cssW * dpr)); pxH = Math.max(1, Math.round(cssH * dpr));
+  if (cv.width !== pxW || cv.height !== pxH) { cv.width = pxW; cv.height = pxH; }
+  const od = Math.min(window.devicePixelRatio || 1, 2);
+  const ow = Math.round(cssW * od), oh = Math.round(cssH * od);
+  if (ov.width !== ow || ov.height !== oh) { ov.width = ow; ov.height = oh; }
+  world.rw = cssW / scene.zoom; world.rh = cssH / scene.zoom;
+  const panelOpen = !$('panel').classList.contains('closed') && !document.body.classList.contains('hide-ui');
+  const sheetH = panelOpen && cssW <= 760 ? $('panel').getBoundingClientRect().height || cssH * 0.58 : 0;
+  world.w = (cssW - (panelOpen && cssW > 760 ? 340 : 0)) / scene.zoom; world.h = (cssH - sheetH) / scene.zoom;
+  ensureFBO(pxW, pxH);
+}
+
+const nodeArr = new Float32Array(MAXN * 4), tanArr = new Float32Array(MAXN * 4);
+function u3(loc, hex) { const c = rgb(hex); gl.uniform3f(loc, c[0], c[1], c[2]); }
+
+function drawBody(c) {
+  const g = c.g, U = bodyP.u, N = c.N;
+  const hs = g.headNodes;
+  for (let i = 0; i < N; i++) {
+    nodeArr[i * 4] = c.px[i]; nodeArr[i * 4 + 1] = c.py[i]; nodeArr[i * 4 + 2] = Math.max(0.3, c.r[i]); nodeArr[i * 4 + 3] = c.u[i];
+    tanArr[i * 4] = c.tx[i]; tanArr[i * 4 + 1] = c.ty[i]; tanArr[i * 4 + 2] = c.curv[i];
+    tanArr[i * 4 + 3] = i < hs ? 1 : 0;
+  }
+  const memPad = g.membrane > 0 ? (g.membraneOffset * g.size / 40) * 2.4 + 4 : 0;
+  const pad = 3 + memPad + 2 / scene.zoom;
+  const [x0, y0, x1, y1] = c.bbox;
+  quad[0] = x0 - pad; quad[1] = y0 - pad; quad[2] = x1 + pad; quad[3] = y0 - pad;
+  quad[4] = x0 - pad; quad[5] = y1 + pad; quad[6] = x1 + pad; quad[7] = y1 + pad;
+  gl.bindVertexArray(bodyVAO);
+  gl.bindBuffer(gl.ARRAY_BUFFER, bodyBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, quad);
+  gl.uniform4fv(U.uNode, nodeArr); gl.uniform4fv(U.uTan, tanArr);
+  gl.uniform1i(U.uN, N); gl.uniform1i(U.uHeadTop, g.headTop ? 1 : 0);
+  gl.uniform1f(U.uR0, g.size); gl.uniform1f(U.uLen, Math.max(1, c.u[N - 1]));
+  gl.uniform1f(U.uTime, c.t); gl.uniform1f(U.uSeed, c.seed % 1000);
+  gl.uniform1f(U.uAA, 1 / (scene.zoom * dpr)); gl.uniform1f(U.uPx, 1 / scene.zoom);
+  gl.uniform1f(U.uAlpha, c.fade); gl.uniform1f(U.uElong, g.elong);
+  gl.uniform3f(U.uHead, c.px[0], c.py[0], Math.max(0.5, c.r[0]));
+  gl.uniform2f(U.uHeadDir, c.tx[0], c.ty[0]);
+  u3(U.cSkin, g.cSkin); u3(U.cSkinHi, g.cSkinHi); u3(U.cInk, g.cInk); u3(U.cInkMid, g.cInkMid); u3(U.cRim, g.cRim);
+  u3(U.cLightRim, g.cLightRim); u3(U.cAccent, g.cAccent); u3(U.cAccent2, g.cAccent2); u3(U.cMembrane, g.cMembrane);
+  u3(U.cHole, g.cHole); u3(U.cHoleGlow, g.cHoleGlow);
+  gl.uniform4f(U.pInkA, g.edgeAmt, g.edgeStart, g.edgeStreaks, g.fringe);
+  gl.uniform4f(U.pInkB, g.stripeAmt, g.stripeCount, g.stripeWidth, g.stripeOffset);
+  gl.uniform4f(U.pInkC, g.bandAmt, Math.max(0.02, g.bandPeriod), g.bandWidth, g.checker);
+  gl.uniform4f(U.pInkD, g.sideAmt, g.sideMode, g.fringeFreq, g.inkSoft);
+  gl.uniform4f(U.pInkE, g.inkDetail, g.flow, g.warp, g.inkMid);
+  gl.uniform4f(U.pInkF, g.stripeStart, g.bandEnd, g.sideWidth, 0);
+  gl.uniform4f(U.pInkG, g.inkDepth, g.sideRibs, 0, 0);
+  gl.uniform4f(U.pSkin, g.centerGlow, g.speckles, g.speckleScale, g.rimShade);
+  gl.uniform4f(U.pSkin2, g.accents, g.roundness, 0, 0);
+  gl.uniform4f(U.pRim, g.rimWidth, g.outlineAmt, g.lightRim, g.lightRimWidth);
+  gl.uniform4f(U.pRim2, g.segLines, Math.max(1, g.segEvery), 0, 0);
+  gl.uniform4f(U.pHead, g.headStyle, g.fanLines, g.headAmt, g.headGlow);
+  gl.uniform4f(U.pCell, g.cellAmt, g.cellScale, g.cellMembrane, g.cellGlow);
+  gl.uniform4f(U.pMem, g.membrane, g.membraneOffset, g.beads, 0);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+const tmpP = new Float32Array(HP * 2);
+function writeStrand(h, P, w0, taper, line, cA, cB, cL, alpha, minW) {
+  let o = h * HP * 2 * FPV;
+  const D = hairData;
+  for (let k = 0; k < HP; k++) {
+    const k0 = k > 0 ? k - 1 : k, k1 = k < HP - 1 ? k + 1 : k;
+    let dx = P[k1 * 2] - P[k0 * 2], dy = P[k1 * 2 + 1] - P[k0 * 2 + 1];
+    const l = Math.hypot(dx, dy) || 1; dx /= l; dy /= l;
+    const s = k / (HP - 1);
+    let w = w0 * (1 - taper * s), a = alpha;
+    if (w < minW) { a *= w / minW; w = minW; }
+    const core = Math.max(0, 1 - 2 * line / w);
+    const nx = -dy * w * 0.5, ny = dx * w * 0.5;
+    const r = lerp(cA[0], cB[0], s), gg = lerp(cA[1], cB[1], s), b = lerp(cA[2], cB[2], s);
+    for (let sd = -1; sd <= 1; sd += 2) {
+      D[o++] = P[k * 2] + nx * sd; D[o++] = P[k * 2 + 1] + ny * sd;
+      D[o++] = sd; D[o++] = core; D[o++] = a; D[o++] = 0;
+      D[o++] = r; D[o++] = gg; D[o++] = b;
+      D[o++] = cL[0]; D[o++] = cL[1]; D[o++] = cL[2];
+    }
+  }
+}
+
+function buildHairGeom(c, h0) {
+  const g = c.g, N = c.N, R0 = g.size, ss = R0 / 40;
+  const hg = smooth((c.grow - 0.15) / 0.85);
+  c.hairStart = h0; c.hairCount = 0;
+  if (hg <= 0.002 || !c.hairs.length) return h0;
+  const minW = 1.3 / (scene.zoom * dpr);
+  const cHair = rgb(g.cHair), cHairL = rgb(g.cHairLine), cRed = rgb(g.cRed), cRed2 = rgb(g.cRed2);
+  const cRedL = [cRed[0] * 0.22, cRed[1] * 0.12, cRed[2] * 0.12];
+  const time = c.t, P = tmpP, el = g.elong;
+  const walls = scene.hairWalls && world.walls.length ? world.walls : null;
+  const tmp = [0, 0];
+  let h = h0;
+  for (const hr of c.hairs) {
+    const i = Math.min(hr.i, N - 1);
+    const tx = c.tx[i], ty = c.ty[i], nx = -ty, ny = tx, r = c.r[i];
+    const phi = hr.side === 0 ? hr.a : hr.side * Math.PI / 2 + hr.a;
+    const ex = Math.cos(phi) * el, ey = Math.sin(phi);
+    let len, w, curl, wave, cA, cB, cL, taper, line, ins;
+    if (hr.type === 0) {
+      len = g.hairLength * R0 * (0.3 + 1.4 * hr.r1 * hr.r1); w = g.hairWidth * ss * (0.6 + 0.8 * hr.r2);
+      curl = g.hairCurl * (0.25 + hr.r3) * hr.cs; wave = g.hairWave; cA = cB = cHair; cL = cHairL; taper = 0.55; line = g.hairLine * ss; ins = g.hairInset;
+    } else if (hr.type === 1) {
+      len = g.redLength * R0 * (0.4 + 1.2 * hr.r1); w = g.redWidth * ss * (0.55 + 0.9 * hr.r2);
+      curl = g.redCurl * (0.25 + hr.r3) * hr.cs; wave = g.redWave; cA = cRed; cB = cRed2; cL = cRedL; taper = 0.75; line = 0.35 * ss; ins = g.hairInset + 0.04;
+    } else {
+      len = g.strandLength * R0 * (0.5 + 0.9 * hr.r1); w = g.hairWidth * ss * (0.9 + 0.7 * hr.r2);
+      curl = (0.4 + 1.8 * hr.r3) * hr.cs; wave = g.strandWave; cA = cB = cHair; cL = cHairL; taper = 0.4; line = g.hairLine * ss * 0.5; ins = 0.6;
+    }
+    len *= hg; if (len < 0.5) continue;
+    line = Math.min(line, w * 0.28);
+    const rx = c.px[i] + (tx * ex + nx * ey) * r * ins;
+    const ry = c.py[i] + (ty * ex + ny * ey) * r * ins;
+    const sphi = Math.sin(phi);
+    const sw = hr.type === 2 ? 0 : g.hairSweep * Math.abs(sphi) * Math.sign(sphi);
+    const base = Math.atan2(ty, tx) + phi + sw;
+    const bx = Math.cos(base), by = Math.sin(base), vx = c.vx[i], vy = c.vy[i];
+    const tgt = clamp((bx * -vy - by * -vx) / (R0 * 1.5) * g.drag, -1.6, 1.6);
+    hr.lag += (tgt - hr.lag) * 0.08;
+    const ph = time * g.waveSpeed * TAU * (0.7 + 0.6 * hr.r4) + hr.r2 * TAU;
+    const step = len / (HP - 1);
+    let ax = rx, ay = ry;
+    P[0] = ax; P[1] = ay;
+    for (let k = 1; k < HP; k++) {
+      const s = (k - 0.5) / (HP - 1);
+      const a = base + hr.lag * s + curl * s + wave * (Math.sin(ph - s * 4) * (0.25 + s) + 0.45 * Math.sin(ph * 1.7 - s * 9 + hr.r3 * 6) * s);
+      ax += Math.cos(a) * step; ay += Math.sin(a) * step;
+      if (walls) { pushOut(ax, ay, w * 0.5 + 1, tmp); ax = tmp[0]; ay = tmp[1]; }
+      P[k * 2] = ax; P[k * 2 + 1] = ay;
+    }
+    writeStrand(h++, P, w, taper, line, cA, cB, cL, 1, minW);
+  }
+  c.hairCount = h - h0;
+  return h;
+}
+
+function buildSporeGeom(h0) {
+  const P = tmpP, minW = 1.2 / (scene.zoom * dpr);
+  let h = h0;
+  for (const s of world.spores) {
+    const g = s.c.g;
+    const a = Math.min(1, s.life * 4) * (1 - smooth((s.life - s.max * 0.6) / (s.max * 0.4)));
+    const sp = Math.hypot(s.vx, s.vy) || 1, dx = s.vx / sp, dy = s.vy / sp;
+    const L = s.size * 2.2;
+    for (let k = 0; k < HP; k++) { const t = k / (HP - 1) - 0.5; P[k * 2] = s.x + dx * L * t; P[k * 2 + 1] = s.y + dy * L * t; }
+    const col = s.red ? rgb(g.cRed2) : rgb(g.cHair);
+    writeStrand(h++, P, s.size, 0.3, 0, col, col, col, a * (s.c.fade), minW);
+  }
+  return h;
+}
+
+function drawHairRange(start, count, alpha) {
+  if (count <= 0) return;
+  gl.useProgram(hairP.p);
+  gl.bindVertexArray(hairVAO);
+  gl.uniform2f(hairP.u.uRes, world.rw, world.rh);
+  gl.uniform1f(hairP.u.uAlpha, alpha);
+  gl.drawElements(gl.TRIANGLES, count * (HP - 1) * 6, gl.UNSIGNED_INT, start * (HP - 1) * 6 * 4);
+}
+
+function render(time) {
+  // geometry
+  let total = world.spores.length;
+  for (const c of world.creatures) total += c.hairs.length;
+  ensureHairCap(total);
+  let h = 0;
+  for (const c of world.creatures) h = buildHairGeom(c, h);
+  const sporeStart = h;
+  h = buildSporeGeom(h);
+  gl.bindBuffer(gl.ARRAY_BUFFER, hairBuf);
+  if (h > 0) gl.bufferSubData(gl.ARRAY_BUFFER, 0, hairData, 0, h * HP * 2 * FPV);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, pxW, pxH);
+  gl.clearColor(0, 0, 0, 0); gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND); gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+  for (const c of world.creatures) {
+    if (c.fade <= 0.001) continue;
+    if (c.g.hairBehind) drawHairRange(c.hairStart, c.hairCount, c.fade);
+    gl.useProgram(bodyP.p);
+    gl.uniform2f(bodyP.u.uRes, world.rw, world.rh);
+    drawBody(c);
+    if (!c.g.hairBehind) drawHairRange(c.hairStart, c.hairCount, c.fade);
+  }
+  drawHairRange(sporeStart, h - sporeStart, 1);
+  gl.disable(gl.BLEND);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, pxW, pxH);
+  gl.useProgram(postP.p);
+  gl.bindVertexArray(postVAO);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, fboTex);
+  const U = postP.u;
+  gl.uniform1i(U.uTex, 0); u3(U.uBg, scene.bg); gl.uniform2f(U.uRes, pxW, pxH);
+  gl.uniform1f(U.uVig, scene.vignette); gl.uniform1f(U.uGrain, scene.grain); gl.uniform1f(U.uExpo, scene.exposure);
+  gl.uniform1f(U.uContrast, scene.contrast); gl.uniform1f(U.uSat, scene.saturation); gl.uniform1f(U.uTime, time); gl.uniform1f(U.uSoft, scene.softness);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  drawOverlay();
+}
+
+/* ============================================================
+   Overlay: walls, selection, tool preview
+   ============================================================ */
+let selected = null;
+const pointer = { x: 0, y: 0, down: false, start: null, path: null, inside: false, type: 'mouse' };
+let tool = 'select';
+let selPulse = 0;
+function drawOverlay() {
+  const od = ov.width / cssW, z = scene.zoom;
+  octx.setTransform(od * z, 0, 0, od * z, 0, 0);
+  octx.clearRect(0, 0, world.rw, world.rh);
+  octx.lineCap = 'round'; octx.lineJoin = 'round';
+  if (scene.showWalls && world.walls.length) {
+    octx.strokeStyle = scene.wallColor; octx.globalAlpha = 0.18; octx.lineWidth = scene.wallThickness + 6;
+    octx.beginPath(); for (const w of world.walls) { octx.moveTo(w[0], w[1]); octx.lineTo(w[2], w[3]); } octx.stroke();
+    octx.globalAlpha = 0.9; octx.lineWidth = scene.wallThickness;
+    octx.stroke();
+    octx.globalAlpha = 1;
+  }
+  if (tool === 'wall' && pointer.down && pointer.start) {
+    octx.strokeStyle = scene.wallColor; octx.globalAlpha = 0.6; octx.lineWidth = scene.wallThickness;
+    octx.setLineDash([6, 6]); octx.beginPath();
+    if (pointer.path && pointer.path.length > 1) { octx.moveTo(pointer.path[0][0], pointer.path[0][1]); for (const p of pointer.path) octx.lineTo(p[0], p[1]); }
+    else { octx.moveTo(pointer.start.x, pointer.start.y); octx.lineTo(pointer.x, pointer.y); }
+    octx.stroke(); octx.setLineDash([]); octx.globalAlpha = 1;
+  }
+  if (tool === 'erase' && pointer.inside) {
+    octx.strokeStyle = '#e2462a'; octx.lineWidth = 1.2 / z; octx.beginPath(); octx.arc(pointer.x, pointer.y, 16, 0, TAU); octx.stroke();
+  }
+  if (world.lure) {
+    octx.strokeStyle = 'rgba(239,220,203,.55)'; octx.lineWidth = 1 / z;
+    octx.beginPath(); octx.arc(world.lure.x, world.lure.y, 10 + 3 * Math.sin(performance.now() / 200), 0, TAU); octx.stroke();
+  }
+  if (selected && world.creatures.length > 1 && selPulse > 0) {
+    const [x0, y0, x1, y1] = selected.bbox;
+    octx.strokeStyle = 'rgba(226,70,42,' + (0.7 * Math.min(1, selPulse)).toFixed(3) + ')';
+    octx.lineWidth = 1.2 / z; octx.setLineDash([4 / z, 5 / z]);
+    octx.strokeRect(x0 - 8, y0 - 8, x1 - x0 + 16, y1 - y0 + 16); octx.setLineDash([]);
+  }
+}
+
+/* ============================================================
+   Walls presets
+   ============================================================ */
+function addPoly(pts, closed) {
+  for (let i = 0; i < pts.length - (closed ? 0 : 1); i++) { const a = pts[i], b = pts[(i + 1) % pts.length]; world.walls.push([a[0], a[1], b[0], b[1]]); }
+}
+const WALL_PRESETS = {
+  Box() { const m = Math.min(world.w, world.h) * 0.08, W = world.w, H = world.h; addPoly([[m, m], [W - m, m], [W - m, H - m], [m, H - m]], true); },
+  Arena() { const cx = world.w / 2, cy = world.h / 2, r = Math.min(world.w, world.h) * 0.44, pts = []; for (let i = 0; i < 48; i++) { const a = i / 48 * TAU; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); } addPoly(pts, true); },
+  Pillars() {
+    const W = world.w, H = world.h, n = 6;
+    for (let k = 0; k < n; k++) {
+      const cx = W * (0.18 + 0.64 * ((k % 3) / 2)), cy = H * (k < 3 ? 0.3 : 0.7), r = Math.min(W, H) * 0.045, pts = [];
+      for (let i = 0; i < 14; i++) { const a = i / 14 * TAU; pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]); }
+      addPoly(pts, true);
+    }
+  },
+  Maze() {
+    const W = world.w, H = world.h, cols = 4, rows = 4, cw = W / cols, ch = H / rows, R = rng((Math.random() * 1e9) | 0);
+    for (let y = 1; y < rows; y++) for (let x = 0; x < cols; x++) if (R() < 0.45) world.walls.push([x * cw + cw * 0.12, y * ch, (x + 1) * cw - cw * 0.12, y * ch]);
+    for (let x = 1; x < cols; x++) for (let y = 0; y < rows; y++) if (R() < 0.45) world.walls.push([x * cw, y * ch + ch * 0.12, x * cw, (y + 1) * ch - ch * 0.12]);
+  },
+  Funnel() { const W = world.w, H = world.h; world.walls.push([W * 0.1, H * 0.2, W * 0.44, H * 0.55], [W * 0.9, H * 0.2, W * 0.56, H * 0.55], [W * 0.44, H * 0.72, W * 0.56, H * 0.72]); },
+};
+
+/* ============================================================
+   Creature management
+   ============================================================ */
+function templateGenome() { return selected ? Object.assign({}, selected.g) : presetGenome(scene.preset); }
+function layoutHitsWalls(c) {
+  const [cx, cy] = c.center();
+  for (let i = 0; i < c.N; i++) {
+    if (scene.edges && (c.px[i] < 0 || c.py[i] < 0 || c.px[i] > world.w || c.py[i] > world.h)) return true;
+    for (const w of world.walls) {
+      if (crosses(cx, cy, c.px[i], c.py[i], w)) return true;
+      const q = closestOnSeg(c.px[i], c.py[i], w);
+      if (Math.hypot(q[0] - c.px[i], q[1] - c.py[i]) < c.rb[i] * 0.8 + scene.wallThickness * 0.5) return true;
+    }
+  }
+  return false;
+}
+function spawn(x, y, genome) {
+  const c = new Creature(genome || templateGenome(), x ?? world.w * (0.3 + Math.random() * 0.4), y ?? world.h * (0.3 + Math.random() * 0.4));
+  // find a clear spot: other headings first, then other places
+  const want = c.center();
+  for (let k = 0; k < 40 && layoutHitsWalls(c); k++) {
+    c.heading = Math.random() * TAU;
+    const sp = k < 12 ? 0 : Math.min(1, (k - 12) / 20);
+    c.layout(lerp(want[0], world.w * (0.15 + 0.7 * Math.random()), sp), lerp(want[1], world.h * (0.15 + 0.7 * Math.random()), sp));
+  }
+  world.creatures.push(c);
+  select(c);
+  ui.count();
+  return c;
+}
+function removeSelected() {
+  if (!selected) return;
+  const i = world.creatures.indexOf(selected);
+  if (i >= 0) world.creatures.splice(i, 1);
+  world.spores = world.spores.filter(s => s.c !== selected);
+  select(world.creatures[Math.min(i, world.creatures.length - 1)] || null);
+  ui.count();
+}
+function select(c) { selected = c; selPulse = 2.5; ui.sync(); }
+function targets() { return scene.editAll ? world.creatures : (selected ? [selected] : []); }
+function setParam(k, v) {
+  const it = ITEM[k];
+  for (const c of targets()) {
+    c.g[k] = v;
+    if (it && it.rb === 'body') c.setGenome(c.g, false);
+    else if (it && it.rb === 'hair') c.buildHairs();
+  }
+}
+function applyPreset(name) {
+  scene.preset = name;
+  const g = presetGenome(name);
+  for (const c of targets()) { c.pending = Object.assign({}, g); c.fadeTarget = 0; }
+  if (!targets().length) spawn(null, null, g);
+  setTimeout(() => ui.sync(), 260);
+}
+function mutate(amount) {
+  for (const c of targets()) {
+    const g = Object.assign({}, c.g), R = Math.random;
+    for (const k in ITEM) {
+      const it = ITEM[k];
+      if (it.t === 'f' || it.t === 'i') {
+        const span = (it.max - it.min) * amount;
+        let v = g[k] + (R() * 2 - 1) * span;
+        v = clamp(v, it.min, it.max); if (it.t === 'i') v = Math.round(v);
+        if (k === 'segments') v = clamp(Math.round(g[k] + (R() * 2 - 1) * 4), 4, MAXN);
+        if (k === 'speed') v = clamp(g[k] * (0.7 + R() * 0.6), 0, 80);
+        g[k] = v;
+      } else if (it.t === 'c' && R() < amount * 1.2) {
+        const c0 = rgb(g[k]), j = amount * 0.35;
+        g[k] = toHex(c0.map(x => x + (R() * 2 - 1) * j));
+      }
+    }
+    c.setGenome(g, true);
+  }
+  ui.sync();
+}
+function randomize() {
+  for (const c of targets()) {
+    const a = presetGenome(PRESET_ORDER[(Math.random() * 5) | 0]), b = presetGenome(PRESET_ORDER[(Math.random() * 5) | 0]);
+    const t = Math.random(), g = {};
+    for (const k in DEF) {
+      const it = ITEM[k];
+      if (it && (it.t === 'f' || it.t === 'i')) { let v = lerp(a[k], b[k], t); if (it.t === 'i') v = Math.round(v); g[k] = v; }
+      else if (it && it.t === 'c') { const ca = rgb(a[k]), cb = rgb(b[k]); g[k] = toHex(ca.map((x, i) => lerp(x, cb[i], t))); }
+      else g[k] = Math.random() < t ? b[k] : a[k];
+    }
+    c.setGenome(g, true);
+  }
+  mutate(0.06);
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+function el(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) { if (k === 'class') e.className = attrs[k]; else if (k.startsWith('on')) e.addEventListener(k.slice(2), attrs[k]); else e.setAttribute(k, attrs[k]); }
+  for (const k of kids) if (k != null) e.append(k);
+  return e;
+}
+let ctlId = 0;
+const fmt = (v, step) => step >= 1 ? String(Math.round(v)) : (Math.abs(v) >= 100 ? v.toFixed(0) : v.toFixed(step < 0.01 ? 3 : 2));
+const sceneRows = [];
+function sliderRow(label, min, max, step, get, set) {
+  const id = 'c' + (ctlId++);
+  const inp = el('input', { type: 'range', id, min, max, step });
+  const out = el('output', { for: id });
+  const row = el('div', { class: 'row' }, el('label', { for: id }, label), inp, out);
+  const upd = () => { const v = get(); inp.value = v; out.textContent = fmt(+v, step); };
+  inp.addEventListener('input', () => { const v = +inp.value; set(v); out.textContent = fmt(v, step); });
+  row.sync = upd; upd(); return row;
+}
+function colorRow(label, get, set) {
+  const id = 'c' + (ctlId++);
+  const inp = el('input', { type: 'color', id });
+  const row = el('div', { class: 'row wide' }, el('label', { for: id }, label), inp);
+  inp.addEventListener('input', () => set(inp.value));
+  row.sync = () => { inp.value = get(); }; row.sync(); return row;
+}
+function checkRow(label, get, set) {
+  const id = 'c' + (ctlId++);
+  const inp = el('input', { type: 'checkbox', id });
+  const row = el('div', { class: 'row wide' }, el('label', { for: id }, label), inp);
+  inp.addEventListener('change', () => set(inp.checked));
+  row.sync = () => { inp.checked = !!get(); }; row.sync(); return row;
+}
+function selectRow(label, opts, get, set) {
+  const id = 'c' + (ctlId++);
+  const inp = el('select', { id }, ...opts.map((o, i) => el('option', { value: typeof o === 'string' && !opts.numeric ? o : i }, typeof o === 'string' ? o : o.l)));
+  const row = el('div', { class: 'row wide' }, el('label', { for: id }, label), inp);
+  inp.addEventListener('change', () => set(inp.value));
+  row.sync = () => { inp.value = get(); }; row.sync(); return row;
+}
+function btns(...pairs) { return el('div', { class: 'btns' }, ...pairs.map(([t, f, title]) => el('button', { onclick: f, title: title || t }, t))); }
+
+const ui = {
+  rows: [], presetSel: null,
+  build() {
+    const body = $('panelBody');
+    const cur = () => selected ? selected.g : presetGenome(scene.preset);
+    // Scene
+    const sc = el('div', { class: 'rows' });
+    const pOpts = PRESET_ORDER.slice(); pOpts.numeric = false;
+    const pRow = selectRow('Creature preset', pOpts, () => scene.preset, v => applyPreset(v));
+    this.presetSel = pRow; sc.append(pRow);
+    const edit = el('div', { class: 'seg', role: 'group', 'aria-label': 'Edit target' });
+    const eSel = el('button', { onclick: () => { scene.editAll = false; upE(); } }, 'Selected');
+    const eAll = el('button', { onclick: () => { scene.editAll = true; upE(); } }, 'All creatures');
+    edit.append(eSel, eAll);
+    const upE = () => { eSel.classList.toggle('on', !scene.editAll); eAll.classList.toggle('on', scene.editAll); ui.selTag(); };
+    upE();
+    sc.append(el('div', { class: 'row wide' }, el('label', null, 'Controls edit'), edit));
+    sc.append(btns(['Randomize', randomize, 'Blend two presets and mutate'], ['Mutate', () => mutate(0.08), 'Nudge every value a little'], ['Reset to preset', () => applyPreset(scene.preset)]));
+    const gRow = checkRow('Gallery cycle', () => scene.gallery, v => { scene.gallery = v; world.galleryT = 0; });
+    sceneRows.push(gRow); sc.append(gRow);
+    sc.append(sliderRow('Cycle every (s)', 1, 12, 0.1, () => scene.galleryInterval, v => scene.galleryInterval = v));
+    sc.append(sliderRow('Time scale', 0, 4, 0.01, () => scene.timeScale, v => scene.timeScale = v));
+    sc.append(checkRow('Creatures collide', () => scene.creatureCollide, v => scene.creatureCollide = v));
+    sc.append(checkRow('Edges block', () => scene.edges, v => scene.edges = v));
+    const d0 = el('details', { open: '' }, el('summary', null, 'Scene'), sc);
+    body.append(d0);
+    // Walls
+    const wl = el('div', { class: 'rows' });
+    wl.append(el('p', { class: 'note' }, 'Pick “Draw wall” in the toolbar and drag on the canvas. Creatures sense walls ahead and slide along them.'));
+    wl.append(checkRow('Freehand walls', () => scene.freehand, v => scene.freehand = v));
+    wl.append(sliderRow('Wall thickness', 1, 40, 0.5, () => scene.wallThickness, v => scene.wallThickness = v));
+    wl.append(colorRow('Wall color', () => scene.wallColor, v => scene.wallColor = v));
+    wl.append(checkRow('Show walls', () => scene.showWalls, v => scene.showWalls = v));
+    wl.append(checkRow('Cilia bend on walls', () => scene.hairWalls, v => scene.hairWalls = v));
+    wl.append(btns(...Object.keys(WALL_PRESETS).map(k => [k, () => { WALL_PRESETS[k](); toast(k + ' walls added'); }])));
+    wl.append(btns(['Clear walls', () => { world.walls.length = 0; toast('Walls cleared'); }], ['Undo last wall', () => { world.walls.pop(); }]));
+    body.append(el('details', null, el('summary', null, 'Walls'), wl));
+    // Genome groups
+    for (const grp of SCHEMA) {
+      const rows = el('div', { class: 'rows' });
+      for (const it of grp.items) {
+        let row;
+        if (it.t === 'sub') { rows.append(el('div', { class: 'sub' }, it.l)); continue; }
+        if (it.t === 'f' || it.t === 'i') row = sliderRow(it.l, it.min, it.max, it.step, () => cur()[it.k], v => setParam(it.k, v));
+        else if (it.t === 'c') row = colorRow(it.l, () => cur()[it.k], v => setParam(it.k, v));
+        else if (it.t === 'b') row = checkRow(it.l, () => cur()[it.k], v => setParam(it.k, v));
+        else if (it.t === 's') { const o = it.opts.map(l => ({ l })); row = selectRow(it.l, o, () => cur()[it.k], v => setParam(it.k, +v)); }
+        this.rows.push(row); rows.append(row);
+      }
+      const d = el('details', grp.open ? { open: '' } : null, el('summary', null, grp.name), rows);
+      body.append(d);
+    }
+    // View
+    const vw = el('div', { class: 'rows' });
+    const vrows = [
+      sliderRow('Zoom', 0.3, 2.5, 0.01, () => scene.zoom, v => { scene.zoom = v; resize(); }),
+      colorRow('Background', () => scene.bg, v => { scene.bg = v; }),
+      sliderRow('Softness', 0, 1, 0.01, () => scene.softness, v => scene.softness = v),
+      sliderRow('Vignette', 0, 1, 0.01, () => scene.vignette, v => scene.vignette = v),
+      sliderRow('Film grain', 0, 0.2, 0.001, () => scene.grain, v => scene.grain = v),
+      sliderRow('Exposure', 0.3, 2, 0.01, () => scene.exposure, v => scene.exposure = v),
+      sliderRow('Contrast', 0.5, 2, 0.01, () => scene.contrast, v => scene.contrast = v),
+      sliderRow('Saturation', 0, 2, 0.01, () => scene.saturation, v => scene.saturation = v),
+      sliderRow('Render scale', 0.4, 1, 0.05, () => scene.renderScale, v => { scene.renderScale = v; resize(); }),
+    ];
+    vw.append(...vrows);
+    body.append(el('details', null, el('summary', null, 'View'), vw));
+    // Data
+    const dt = el('div', { class: 'rows' });
+    const ta = el('textarea', { id: 'jsonBox', spellcheck: 'false', 'aria-label': 'Settings JSON' });
+    dt.append(el('p', { class: 'note' }, 'Copy the selected creature’s settings as JSON, or paste JSON here and apply it.'));
+    dt.append(ta);
+    dt.append(btns(
+      ['Copy settings', () => {
+        const txt = JSON.stringify(templateGenome(), null, 1); ta.value = txt;
+        if (navigator.clipboard) navigator.clipboard.writeText(txt).then(() => toast('Settings copied'), () => { ta.select(); toast('Select and copy the text'); });
+        else { ta.select(); toast('Select and copy the text'); }
+      }],
+      ['Apply JSON', () => {
+        try { const g = JSON.parse(ta.value); for (const c of targets()) c.setGenome(Object.assign({}, DEF, g), true); ui.sync(); toast('Settings applied'); }
+        catch (e) { toast('That JSON could not be read: ' + e.message.slice(0, 60)); }
+      }],
+    ));
+    dt.append(el('p', { class: 'note' }, 'Keys: Space pause · R regrow · A add · Delete remove · H hide panels · 1–5 presets · G gallery.'));
+    body.append(el('details', null, el('summary', null, 'Save & shortcuts'), dt));
+    this.viewRows = vrows;
+  },
+  sync() { for (const r of this.rows) r.sync(); for (const r of sceneRows) r.sync(); this.syncPreset(); this.selTag(); },
+  syncPreset() { if (this.presetSel) this.presetSel.sync(); },
+  selTag() {
+    const t = $('selTag');
+    if (scene.editAll) t.textContent = 'Editing: all ' + world.creatures.length;
+    else t.textContent = selected ? 'Editing: creature ' + (world.creatures.indexOf(selected) + 1) : 'Nothing selected';
+  },
+  count() { $('count').textContent = world.creatures.length + (world.creatures.length === 1 ? ' creature' : ' creatures'); this.selTag(); },
+};
+
+let toastT = 0;
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1800); }
+
+function setPanel(open) {
+  $('panel').classList.toggle('closed', !open);
+  document.body.classList.toggle('panel-closed', !open);
+  $('bPanel').classList.toggle('on', open);
+  resize();
+}
+function setPaused(p) { scene.paused = p; $('bPlay').textContent = p ? 'Play' : 'Pause'; $('bPlay').classList.toggle('on', p); }
+$('bPlay').onclick = () => setPaused(!scene.paused);
+$('bRegrow').onclick = () => { for (const c of world.creatures) c.grow = 0; };
+$('bAdd').onclick = () => spawn();
+$('bDel').onclick = () => removeSelected();
+$('bPanel').onclick = () => setPanel($('panel').classList.contains('closed'));
+for (const b of document.querySelectorAll('#tools button')) b.onclick = () => setTool(b.dataset.tool);
+function setTool(t) {
+  tool = t;
+  for (const b of document.querySelectorAll('#tools button')) b.classList.toggle('on', b.dataset.tool === t);
+  ov.className = 'tool-' + t;
+  world.lure = null;
+}
+
+/* Pointer handling */
+function toWorld(e) { return { x: e.clientX / scene.zoom, y: e.clientY / scene.zoom }; }
+function pickCreature(x, y) {
+  let best = null, bd = 1e9;
+  for (const c of world.creatures) for (let i = 0; i < c.N; i++) {
+    const d = Math.hypot(c.px[i] - x, c.py[i] - y) - c.r[i] * c.g.elong;
+    if (d < bd) { bd = d; best = c; }
+  }
+  return bd < 24 ? best : null;
+}
+function eraseAt(x, y) {
+  const before = world.walls.length;
+  world.walls = world.walls.filter(w => { const c = closestOnSeg(x, y, w); return Math.hypot(c[0] - x, c[1] - y) > 16 + scene.wallThickness * 0.5; });
+  return before - world.walls.length;
+}
+ov.addEventListener('pointerdown', e => {
+  ov.setPointerCapture(e.pointerId);
+  const p = toWorld(e); Object.assign(pointer, p, { down: true, start: p, path: [[p.x, p.y]], type: e.pointerType, inside: true });
+  if (tool === 'select') {
+    const c = pickCreature(p.x, p.y);
+    if (c) { select(c); c.drag = { x: p.x, y: p.y }; }
+  } else if (tool === 'erase') eraseAt(p.x, p.y);
+  else if (tool === 'attract') world.lure = p;
+  else if (tool === 'spawn') spawn(p.x, p.y);
+});
+ov.addEventListener('pointermove', e => {
+  const p = toWorld(e); pointer.x = p.x; pointer.y = p.y; pointer.inside = true;
+  if (tool === 'attract' && (pointer.down || e.pointerType === 'mouse')) world.lure = p;
+  if (!pointer.down) return;
+  if (tool === 'select' && selected && selected.drag) selected.drag = { x: p.x, y: p.y };
+  else if (tool === 'erase') eraseAt(p.x, p.y);
+  else if (tool === 'wall' && scene.freehand) {
+    const last = pointer.path[pointer.path.length - 1];
+    if (Math.hypot(p.x - last[0], p.y - last[1]) > 14) pointer.path.push([p.x, p.y]);
+  }
+});
+function endPointer(e) {
+  if (!pointer.down) return;
+  pointer.down = false;
+  if (tool === 'select') { for (const c of world.creatures) c.drag = null; }
+  else if (tool === 'wall') {
+    if (scene.freehand && pointer.path.length > 1) { pointer.path.push([pointer.x, pointer.y]); addPoly(pointer.path, false); }
+    else if (pointer.start && Math.hypot(pointer.x - pointer.start.x, pointer.y - pointer.start.y) > 6) world.walls.push([pointer.start.x, pointer.start.y, pointer.x, pointer.y]);
+  } else if (tool === 'attract' && pointer.type !== 'mouse') world.lure = null;
+  pointer.start = null; pointer.path = null;
+}
+ov.addEventListener('pointerup', endPointer);
+ov.addEventListener('pointercancel', endPointer);
+ov.addEventListener('pointerleave', () => { pointer.inside = false; if (tool === 'attract' && !pointer.down) world.lure = null; });
+
+window.addEventListener('keydown', e => {
+  if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+  const k = e.key;
+  if (k === ' ') { setPaused(!scene.paused); e.preventDefault(); }
+  else if (k === 'r' || k === 'R') { for (const c of world.creatures) c.grow = 0; }
+  else if (k === 'a' || k === 'A') spawn();
+  else if (k === 'Delete' || k === 'Backspace') removeSelected();
+  else if (k === 'h' || k === 'H') { document.body.classList.toggle('hide-ui'); resize(); }
+  else if (k === 'c' || k === 'C') setPanel($('panel').classList.contains('closed'));
+  else if (k === 'g' || k === 'G') { scene.gallery = !scene.gallery; world.galleryT = 0; ui.sync(); toast(scene.gallery ? 'Gallery cycling on' : 'Gallery cycling off'); }
+  else if (k >= '1' && k <= '5') applyPreset(PRESET_ORDER[+k - 1]);
+});
+window.addEventListener('resize', resize);
+
+/* ============================================================
+   Boot
+   ============================================================ */
+// start zoomed so a full-size creature fits comfortably on any screen
+scene.zoom = Math.round(clamp(Math.min(window.innerWidth, window.innerHeight) / 640, 0.6, 1.3) * 100) / 100;
+resize();
+ui.build();
+const startPreset = (location.hash || '').replace('#', '');
+if (PRESET_ORDER.some(p => p.replace(/\s/g, '-').toLowerCase() === startPreset)) scene.preset = PRESET_ORDER.find(p => p.replace(/\s/g, '-').toLowerCase() === startPreset);
+const first = new Creature(presetGenome(scene.preset), world.w * 0.5, world.h * 0.5, -Math.PI / 2 + 0.4);
+world.creatures.push(first);
+select(first);
+ui.count();
+setPanel(window.innerWidth > 760);
+setTimeout(() => toast('Tap a creature to select it. Use Draw wall to add obstacles.'), 900);
+
+let last = performance.now(), acc = 0;
+const DT = 1 / 60;
+function loop(now) {
+  const elapsed = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!scene.paused) {
+    acc += elapsed * scene.timeScale;
+    let n = 0;
+    while (acc >= DT && n < 6) { world.step(DT); acc -= DT; n++; }
+    if (n === 6) acc = 0;
+  }
+  selPulse = Math.max(0, selPulse - elapsed);
+  render(now / 1000);
+  requestAnimationFrame(loop);
+}
+// expose for debugging / automation
+window.inkworm = { world, scene, spawn, applyPreset, select, PRESETS, DEF, step: dt => world.step(dt), render: () => render(performance.now() / 1000) };
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
